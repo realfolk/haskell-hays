@@ -2,157 +2,208 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 module HAYS.Server
-    ( Config (..)
-    , run
+    ( Error (..)
+    , Port
+    , Server
+    , defaultLogger
+    , defaultServer
+    , listen
+    , setLogger
+    , setOnErrorIO
+    , setOnErrorResponse
+    , setOnMsg
+    , setPort
+    , setRouter
+    , setWaiMiddleware
+    , setWarpSettings
+    , setWarpTLSSettings
     ) where
 
-import           Data.Bifunctor              (bimap)
-import           Data.Maybe                  (fromMaybe)
-import           Data.Text                   (Text)
-import qualified Data.Text                   as Text
-import qualified Data.Text.Encoding          as TextEncoding
-import           GHC.Exception.Type          (SomeException, fromException)
+import           Data.Function               ((&))
+import qualified Data.Text.Encoding          as Text.Encoding
+import           Data.Word                   (Word16)
+import           GHC.Exception.Type          (SomeException)
+import           HAYS.Logger                 (Logger)
+import qualified HAYS.Logger                 as Logger
 import           HAYS.Server.Request         (Request)
 import qualified HAYS.Server.Request         as Request
 import           HAYS.Server.Response        (Response)
 import qualified HAYS.Server.Response        as Response
-import           HAYS.Server.Route           (Route)
-import qualified HAYS.Server.Route           as Route
+import           HAYS.Server.Router          (Router)
+import qualified HAYS.Server.Router          as Router
+import           Lib.Time                    (Time)
 import qualified Lib.Time                    as Time
 import qualified Lib.URL.Component.Path      as Path
+import qualified Lib.URL.Component.Query     as Query
+import           Lib.UUID                    (UUID)
 import qualified Lib.UUID                    as UUID
-import           Logger                      (Logger)
-import qualified Logger                      as Logger
 import qualified Network.HTTP.Types          as HTTP
 import qualified Network.Wai                 as Wai
 import qualified Network.Wai.Handler.Warp    as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
-import           System.TimeManager          (TimeoutThread (TimeoutThread))
 
-data Config
-  = Config
-      { cRoutes      :: [Route]
-        -- ^ The list of routes.
-      , cNotFound    :: Request -> Route.Action
-        -- ^ The response to use when a requested route is not found.
-      , cTLSSettings :: Maybe WarpTLS.TLSSettings
-        -- ^ The TLS settings to use when running securely.
-      , cSettings    :: Maybe Warp.Settings
-        -- ^ The Warp settings to use, if any.
-      , cMiddleware  :: Maybe Wai.Middleware
-        -- ^ The WAI middleware settings to use, if any.
-      , cLogger      :: Logger
-        -- ^ The logger to use.
+-- * Server
+
+data Server msg
+  = Server
+      { _port            :: Port
+      , _warpSettings    :: Warp.Settings
+      , _warpTLSSettings :: Maybe WarpTLS.TLSSettings
+      , _waiMiddleware   :: Wai.Middleware
+      , _logger          :: UUID -> Logger
+      , _router          :: Router msg
+      , _onMsg           :: msg -> IO Response
+      , _onErrorResponse :: Error -> Response
+      , _onErrorIO       :: Error -> IO ()
       }
 
-run :: Config -> IO ()
-run Config {..} =
-  runSettings settings
-    $ middleware
-    $ \waiRequest sendWaiResponse -> do
-        -- Track request start time
-        start <- Time.now
-        -- Transform request
-        request <- Request.fromWaiRequest waiRequest
-        -- Determine log request ID
-        requestLogId <- nextLogId
-        -- Log incoming request
-        logRequest cLogger requestLogId request
-        -- Compute response based on server configuration
-        response <- case Route.find request cRoutes of
-          Just action -> processAction action
-          Nothing     -> processAction $ cNotFound request
-        -- Send response to client
-        responseSent <- sendWaiResponse $ Response.toWaiResponse response
-        -- Track request end time
-        end <- Time.now
-        let elapsed = end - start
-        logResponse cLogger requestLogId response elapsed
-        -- Return correct value for WAI
-        return responseSent
+-- ** Constructors
+
+defaultServer :: Server msg
+defaultServer =
+  Server
+    3000
+    Warp.defaultSettings
+    Nothing
+    id
+    defaultLogger
+    Router.next
+    (\_ -> (pure defaultResponse))
+    (\_ -> defaultResponse)
+    (\_ -> return ())
   where
-    runSettings = maybe Warp.runSettings WarpTLS.runTLS cTLSSettings
-    settings = Warp.setOnException (logException cLogger) $ fromMaybe Warp.defaultSettings cSettings
-    middleware = fromMaybe id cMiddleware
-    processAction :: Route.Action -> IO Response
-    processAction action = do
-      case action of
-        Route.Impure io        -> io >>= processAction
-        Route.Respond response -> return response
+    defaultResponse =
+      Response.new
+        HTTP.status500
+        []
+        "Default Server Response"
 
--- Logging
+-- ** Execution
 
-instance Logger.ToRecord SomeException where
-  toRecord = Logger.bold (Logger.Level Logger.Error) . Logger.text . Text.pack . show
+listen :: Server msg -> IO ()
+listen (Server {..}) =
+  startServer $ \waiRequest sendWaiResponse -> do
+    -- Track request start time
+    startTime <- Time.now
+    -- Transform request
+    request <- Request.fromWaiRequest waiRequest
+    -- Determine log request ID
+    requestID <- nextLogID
+    let logger = _logger requestID
+    -- Log incoming request
+    logRequest logger request
+    -- Compute response based on server configuration
+    response <- case Router.route _router request of
+      Just msg -> _onMsg msg
+      Nothing  -> do
+        let error' = UnhandledRequest request
+        _onErrorIO error'
+        return $ _onErrorResponse error'
+    -- Send response to client
+    responseSent <- sendWaiResponse $ Response.toWaiResponse response
+    -- Track request end time
+    endTime <- Time.now
+    let elapsedTime = endTime - startTime
+    logResponse logger response elapsedTime
+    -- Return correct value for WAI
+    return responseSent
+  where
+    warpSettings =
+      _warpSettings
+        & Warp.setOnException (\_ e -> _onErrorIO (WarpException e))
+        & Warp.setOnExceptionResponse (Response.toWaiResponse . _onErrorResponse . WarpException)
+    startServer =
+      (maybe Warp.runSettings WarpTLS.runTLS _warpTLSSettings) warpSettings . _waiMiddleware
 
-instance Logger.ToRecord TimeoutThread where
-  toRecord = Logger.regular (Logger.Level Logger.Warn) . Logger.text . Text.pack . show
+-- ** Setters
 
-instance Logger.ToRecord Warp.InvalidRequest where
-  toRecord = Logger.regular (Logger.Level Logger.Warn) . Logger.text . Text.pack . show
+setPort :: Port -> Server msg -> Server msg
+setPort port server = server { _port = port }
 
-type LogId = UUID.UUID
+setWarpSettings :: Warp.Settings -> Server msg -> Server msg
+setWarpSettings warpSettings server = server { _warpSettings = warpSettings }
 
-nextLogId :: IO LogId
-nextLogId = UUID.nextRandom
+setWarpTLSSettings :: Maybe WarpTLS.TLSSettings -> Server msg -> Server msg
+setWarpTLSSettings warpTLSSettings server = server { _warpTLSSettings = warpTLSSettings }
 
-logIdToText :: LogId -> Text
-logIdToText = UUID.encodeBase64TextStrict
+setWaiMiddleware :: Wai.Middleware -> Server msg -> Server msg
+setWaiMiddleware waiMiddleware server = server { _waiMiddleware = waiMiddleware }
 
-logRequest :: Logger -> LogId -> Request -> IO ()
-logRequest logger logId (method, path, _, _, _) =
-  writeRecord (logger Logger.Debug) logId record
+setLogger :: (UUID -> Logger) -> Server msg -> Server msg
+setLogger logger server = server { _logger = logger }
+
+setRouter :: Router msg -> Server msg -> Server msg
+setRouter router server = server { _router = router }
+
+setOnMsg :: (msg -> IO Response) -> Server msg -> Server msg
+setOnMsg onMsg server = server { _onMsg = onMsg }
+
+setOnErrorResponse :: (Error -> Response) -> Server msg -> Server msg
+setOnErrorResponse onErrorResponse server = server { _onErrorResponse = onErrorResponse }
+
+setOnErrorIO :: (Error -> IO ()) -> Server msg -> Server msg
+setOnErrorIO onErrorIO server = server { _onErrorIO = onErrorIO }
+
+-- * Error
+
+data Error
+  = UnhandledRequest Request
+  | WarpException SomeException
+
+-- * Port
+
+type Port = Word16
+
+-- * Logging
+
+defaultLogger :: UUID -> Logger
+defaultLogger requestID =
+  Logger.defaultNamespace [Logger.fromUUID requestID] Logger.terminal
+
+-- ** Internal
+
+nextLogID :: IO UUID
+nextLogID = UUID.nextRandom
+
+logRequest :: Logger -> Request -> IO ()
+logRequest logger request =
+  Logger.debug logger sections
     where
-      record = Logger.delimitSpace
-        [ Logger.leftArrow
-        , Logger.boldText (Logger.Level Logger.Info) $ TextEncoding.decodeUtf8 method
-        , Logger.text $ Path.toText path
+      query = Request.getQuery request
+      sections =
+        [ "<- "
+        , Logger.setStyle Logger.Bold
+            $ Logger.plain
+            $ Text.Encoding.decodeUtf8
+            $ Request.getMethod request
+        , " "
+        , Logger.plain $ Path.toText $ Request.getPath request
+        , setGreyForeground
+            $ if Query.isEmpty query
+               then ""
+               else "?" <> Logger.plain (Query.toText query)
         ]
 
-logResponse :: Logger -> LogId -> Response -> Time.Time -> IO ()
-logResponse logger logId (HTTP.Status code _, _, _) elapsed =
-  writeRecord (logger Logger.Debug) logId record
+logResponse :: Logger -> Response -> Time -> IO ()
+logResponse logger response elapsedTime =
+  Logger.debug logger sections
     where
-      record = Logger.delimitSpace
-        [ Logger.rightArrow
-        , Logger.bold (colorCode code) $ Logger.toRecord code
-        , Logger.regular Logger.Muted $ Logger.toRecord $ Time.toMilliseconds elapsed
+      sections =
+        [ "-> "
+        , Logger.fromShow statusCode
+            & Logger.setForeground (statusColor statusCode)
+            & Logger.setStyle Logger.Bold
+        , " "
+        , setGreyForeground
+            $ Logger.fromMilliseconds
+            $ Time.toMilliseconds elapsedTime
         ]
+      statusCode = HTTP.statusCode $ Response.getStatus response
+      statusColor statusCode
+        | statusCode >= 400 = Logger.Red Logger.Normal
+        | statusCode >= 300 = Logger.Yellow Logger.Normal
+        | statusCode >= 200 = Logger.Green Logger.Normal
+        | otherwise = Logger.Default
 
-      colorCode code
-        | code >= 400 = Logger.Level Logger.Error
-        | code >= 300 = Logger.Level Logger.Warn
-        | code >= 200 = Logger.Success
-        | otherwise = Logger.Muted
-
-writeRecord :: (Logger.Record -> IO ()) -> LogId -> Logger.Record -> IO ()
-writeRecord log logId record =
-  log
-    $ Logger.delimitSpace
-        [ Logger.surroundBrackets $ Logger.mutedRegularText $ logIdToText logId
-        , record
-        ]
-
-logException :: Logger -> Maybe Wai.Request -> SomeException -> IO ()
-logException logger maybeRequest exception =
-  case fromException exception of
-    Just e@TimeoutThread -> logWarn $ record e
-    _                    -> case fromException exception of
-                              Just e@Warp.ConnectionClosedByPeer -> logWarn $ record e
-                              _ -> logError $ record exception
-    where
-      record :: Logger.ToRecord r => r -> Logger.Record
-      record r = Logger.delimitSpace $ waiRequestRecord <> [Logger.toRecord r]
-      waiRequestRecord =
-        case maybeRequest of
-          Nothing -> []
-          Just request ->
-            [ Logger.delimitSpace
-                $ map (Logger.text . Text.pack)
-                    [ show $ Wai.requestMethod request
-                    , show $ Wai.httpVersion request
-                    , show $ Wai.pathInfo request
-                    ]
-            ]
-      logWarn = logger Logger.Warn
-      logError = logger Logger.Error
+setGreyForeground :: Logger.Section -> Logger.Section
+setGreyForeground = Logger.setForeground (Logger.Black Logger.Bright)

@@ -1,37 +1,88 @@
-{-# LANGUAGE TupleSections #-}
-
 module HAYS.Server.Request
     ( Body
-    , Headers
+    , Header
     , Method
     , Path
     , Query
-    , QueryItem
     , Request
+    , consumeHeaderBy
+    , consumeNextPathFragment
+    , consumeQueryItemBy
     , fromWaiRequest
+    , getBody
+    , getHeaders
+    , getMethod
+    , getPath
+    , getQuery
     ) where
 
-import           HAYS.Server.Common           (Body, Headers)
+import           Control.Monad.IO.Class       (MonadIO)
+import qualified Control.Monad.IO.Class       as Monad.IO
+import qualified Data.List                    as List
+import           HAYS.Server.Internal.HTTP    (Body, Header, HeaderName, Method)
 import           Lib.URL.Component.Path       (Path)
 import qualified Lib.URL.Component.Path       as Path
 import           Lib.URL.Component.Query      (Query)
 import qualified Lib.URL.Component.Query      as Query
-import qualified Lib.URL.Component.Query.Item as QueryItem
-import qualified Network.HTTP.Types           as H
+import qualified Lib.URL.Component.Query.Item as Query.Item
 import qualified Network.Wai                  as Wai
 
-type Request = (Method, Path, Query, Headers, Body)
+-- * Request
 
-type QueryItem = QueryItem.Item
+data Request
+  = Request
+      { _method  :: Method
+      , _path    :: Path
+      , _query   :: Query
+      , _headers :: [Header]
+      , _body    :: Body
+      }
 
-type Method = H.Method
+-- ** Constructors
 
-fromWaiRequest :: Wai.Request -> IO Request
+fromWaiRequest :: MonadIO m => Wai.Request -> m Request
 fromWaiRequest req =
-  (method, path, query, headers, ) <$> body
+  Request method path query headers <$> body
   where
     method = Wai.requestMethod req
     path = Path.fromWaiRequest req
     query = Query.fromWaiRequest req
     headers = Wai.requestHeaders req
-    body = Wai.lazyRequestBody req
+    body = Monad.IO.liftIO $ Wai.lazyRequestBody req
+
+-- ** Getters
+
+getMethod :: Request -> Method
+getMethod = _method
+
+getPath :: Request -> Path
+getPath = _path
+
+getQuery :: Request -> Query
+getQuery = _query
+
+getHeaders :: Request -> [Header]
+getHeaders = _headers
+
+getBody :: Request -> Body
+getBody = _body
+
+-- ** Modifiers
+
+consumeNextPathFragment :: Request -> Maybe (Path.Section, Request)
+consumeNextPathFragment request = do
+  (section, newPath) <- Path.uncons $ getPath request
+  return (section, request { _path = newPath })
+
+consumeHeaderBy :: (Header -> Bool) -> Request -> Maybe (Header, Request)
+consumeHeaderBy f request =
+  case List.partition f (getHeaders request) of
+    ([], _) -> Nothing
+    (match:otherMatches, nonMatches) ->
+      Just (match, request { _headers = otherMatches ++ nonMatches })
+
+consumeQueryItemBy :: (Query.Item.Item -> Bool) -> Request -> Maybe (Query.Item.Item, Request)
+consumeQueryItemBy f request = do
+  let (maybeQueryItem, nonMatches) = Query.findItem f (getQuery request)
+  queryItem <- maybeQueryItem
+  return (queryItem, request { _query = nonMatches })

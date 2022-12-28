@@ -1,20 +1,48 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module HAYS.Server.Response
     ( Body
-    , Headers
+    , Header
     , Response
     , Status
+    , getBody
+    , getHeaders
+    , getStatus
+    , new
     , toWaiResponse
     ) where
 
-import           Data.Binary.Builder        (fromLazyByteString)
-import           HAYS.Server.Common (Body, Headers)
-import qualified Network.HTTP.Types         as H
-import qualified Network.Wai                as Wai
+import           Blaze.ByteString.Builder (fromLazyByteString)
+import           HAYS.Server.Internal.HTTP       (Body, Header, Status)
+import qualified Network.Wai              as Wai
 
-type Response = (Status, Headers, Body)
+-- * Response
 
-type Status = H.Status
+data Response
+  = Response
+      { _status          :: Status
+      , _responseHeaders :: [Header]
+      , _responseBody    :: Body
+      }
+
+-- ** Constructors
+
+new :: Status -> [Header] -> Body -> Response
+new = Response
+
+-- ** Converters
 
 toWaiResponse :: Response -> Wai.Response
-toWaiResponse (status, headers, body) =
-  Wai.responseBuilder status headers (fromLazyByteString body)
+toWaiResponse Response{..} =
+  Wai.responseBuilder _status _responseHeaders (fromLazyByteString _responseBody)
+
+-- ** Getters
+
+getStatus :: Response -> Status
+getStatus = _status
+
+getHeaders :: Response -> [Header]
+getHeaders = _responseHeaders
+
+getBody :: Response -> Body
+getBody = _responseBody

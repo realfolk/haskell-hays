@@ -9,8 +9,7 @@
     haskellProject.url = "github:realfolk/nix?dir=lib/projects/haskell";
     commonProject.url = "github:realfolk/nix?dir=lib/projects/common";
     projectLib.url = "github:realfolk/nix?dir=lib/projects/lib";
-    haskellLib.url = "github:realfolk/haskell-lib/00ebe89aa31af2efa0be2e9c870f8164171cb6b7";
-    haskellLogger.url = "github:realfolk/haskell-logger/53fcda998bac6ca14d7977941f6c662491870bea";
+    haskellLib.url = "github:realfolk/haskell-lib/80cad4f26f3109a28eee79afabec803ea66e3395";
   };
 
   outputs =
@@ -25,7 +24,6 @@
     , commonProject
     , projectLib
     , haskellLib
-    , haskellLogger
     , ...
     }:
     flakeUtils.lib.eachDefaultSystem (system:
@@ -99,11 +97,6 @@
         buildArtifactsDir = config.buildArtifactsDir;
       };
 
-      haskellLoggerLibrary = haskellLogger.lib.${system}.defineLoggerProject {
-        buildDir = config.buildDir;
-        buildArtifactsDir = config.buildArtifactsDir;
-      };
-
       # PROJECTS
 
       haysLibDefinition = {
@@ -111,7 +104,6 @@
         projectName = "lib";
         localDependencies = [
           haskellLibLibrary
-          haskellLoggerLibrary
         ];
       };
 
@@ -136,6 +128,7 @@
         ];
         executables = {
           test = "Spec.hs";
+          sandbox = "Sandbox.hs";
         };
       };
 
