@@ -2,6 +2,7 @@
 
 module HAYS.Server.Router
     ( Router
+    , combine
     , getBody
     , getHeaderValue
     , getMethod
