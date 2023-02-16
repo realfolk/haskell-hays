@@ -128,7 +128,7 @@
         ];
         executables = {
           test = "Spec.hs";
-          sandbox = "Sandbox.hs";
+          example = "Example.hs";
         };
       };
 

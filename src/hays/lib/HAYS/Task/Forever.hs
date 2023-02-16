@@ -6,26 +6,31 @@ module HAYS.Task.Forever
     , Process
     , ToIO
     , defaultConfig
-    , forever
+    , fork
+    , getNextError
     , kill
-    , nextError
+    , newConfig
+    , run
     , setErrorInterval
+    , setExceptionHandlers
     , setLogger
-    , setOnError
+    , setMapConfigOnError
     , setToIO
-    , waitUntilTerminated
+    , wait
     ) where
 
 import qualified Control.Concurrent      as Concurrent
 import           Control.Concurrent.Chan (Chan)
 import qualified Control.Concurrent.Chan as Chan
-import           Control.Exception       (AsyncException, SomeException)
+import           Control.Exception       (SomeException)
 import qualified Control.Exception       as Exception
 import           Control.Monad.IO.Class  (MonadIO)
-import           Data.Text               (Text)
+import qualified Control.Monad.IO.Class  as MonadIO
 import           HAYS.Logger             (Logger)
 import           HAYS.Task               (TaskT)
 import qualified HAYS.Task               as Task
+import qualified HAYS.Task.Once          as Task.Once
+import           HAYS.Task.Types         (OnError, ToIO)
 import           Lib.Concurrent.Lock     (Lock)
 import qualified Lib.Concurrent.Lock     as Lock
 import qualified Lib.Time                as Time
@@ -39,33 +44,52 @@ data Process error'
       , _errorChan       :: Chan error'
       }
 
-waitUntilTerminated :: Process error' -> IO ()
-waitUntilTerminated process = do
+wait :: MonadIO m => Process error' -> m ()
+wait process = MonadIO.liftIO $ do
   let lock = _terminationLock process
   Lock.acquire lock
   Lock.release lock
 
-kill :: Process error' -> IO ()
-kill = Concurrent.killThread . _threadId
+kill :: MonadIO m => Process error' -> m ()
+kill = MonadIO.liftIO . Concurrent.killThread . _threadId
 
-nextError :: Process error' -> IO error'
-nextError = Chan.readChan . _errorChan
+getNextError :: Process error' -> IO error'
+getNextError = Chan.readChan . _errorChan
 
 -- * Config
 
 data Config taskConfig error' m a
   = Config
-      { _logger        :: Logger
-      , _errorInterval :: Time.Seconds
-      , _toIO          :: ToIO taskConfig m a
-      , _onError       :: OnError taskConfig error'
+      { _logger            :: Logger
+      , _errorInterval     :: Time.Seconds
+      , _toIO              :: ToIO taskConfig m a
+      , _mapConfigOnError  :: OnError error' (taskConfig -> taskConfig)
+      , _exceptionHandlers :: [Exception.Handler error']
       }
 
 -- ** Constructors
 
-defaultConfig :: Text -> ToIO taskConfig m a -> Config taskConfig error' m a
-defaultConfig name toIO =
-  Config (Task.defaultLogger name) 0 toIO (const id)
+newConfig
+  :: Logger
+  -> Time.Seconds
+  -> ToIO taskConfig m a
+  -> OnError error' (taskConfig -> taskConfig)
+  -> [Exception.Handler error']
+  -> Config taskConfig error' m a
+newConfig = Config
+
+defaultConfig
+  :: ToIO taskConfig m a
+  -> (SomeException -> error')
+  -> Config taskConfig error' m a
+defaultConfig toIO onSomeException =
+  Config
+    Task.defaultLogger
+    0
+    toIO
+    (const id)
+    [ Exception.Handler (return . onSomeException)
+    ]
 
 -- ** Setters
 
@@ -78,58 +102,63 @@ setErrorInterval errorInterval config = config { _errorInterval = errorInterval 
 setToIO :: ToIO taskConfig m a -> Config taskConfig error' m a -> Config taskConfig error' m a
 setToIO toIO config = config { _toIO = toIO }
 
-setOnError :: OnError taskConfig error' -> Config taskConfig error' m a -> Config taskConfig error' m a
-setOnError onError config = config { _onError = onError }
+setMapConfigOnError :: OnError error' (taskConfig -> taskConfig) -> Config taskConfig error' m a -> Config taskConfig error' m a
+setMapConfigOnError onError config = config { _mapConfigOnError = onError }
 
--- ** ToIO
-
-type ToIO taskConfig m a = taskConfig -> m a -> IO a
-
--- ** OnError
-
-type OnError taskConfig error' = error' -> taskConfig -> taskConfig
+setExceptionHandlers :: [Exception.Handler error'] -> Config taskConfig error' m a -> Config taskConfig error' m a
+setExceptionHandlers exceptionHandlers config = config { _exceptionHandlers = exceptionHandlers }
 
 -- * Execution
 
-forever
-  :: (MonadIO m)
+run
+  :: (Monad m, MonadIO n)
+  => Config taskConfig error' m (Either error' a)
+  -> (error' -> IO ())
+  -> taskConfig
+  -> TaskT taskConfig error' m a
+  -> n ()
+run foreverConfig handleError taskConfig task =
+  MonadIO.liftIO $ Exception.bracket acquire release action
+    where
+      acquire = do
+        process <- fork foreverConfig taskConfig task
+        errorThreadID <- Concurrent.forkIO $ handleErrorLoop $ getNextError process
+        return (process, errorThreadID)
+      release (process, errorThreadID) = do
+        kill process
+        Concurrent.killThread errorThreadID
+      action (process, _) =
+        wait process
+      handleErrorLoop getNextError' = do
+        error' <- getNextError'
+        handleError error'
+        handleErrorLoop getNextError'
+
+fork
+  :: (Monad m, MonadIO n)
   => Config taskConfig error' m (Either error' a)
   -> taskConfig
   -> TaskT taskConfig error' m a
-  -> IO (Process error')
-forever (Config {..}) initialTaskConfig task = do
-  errorChan <- Chan.newChan
-  terminationLock <- Lock.newAcquired
-  threadId <- Concurrent.forkIOWithUnmask $ \unmask -> do
-    loopTaskAndCatchExceptions unmask errorChan initialTaskConfig
-    Lock.release terminationLock
-  return $ Process terminationLock threadId errorChan
-    where
-      errorIntervalMicroseconds = fromIntegral $ Time.toMicroseconds $ Time.fromSeconds _errorInterval
-      runTask taskConfig = _toIO taskConfig $ Task.runTaskT _logger taskConfig task
-      loopTaskAndCatchExceptions unmask errorChan taskConfig =
-        Exception.catches
-          (unmask $ loopTask errorChan taskConfig)
-          (makeExceptionHandlers unmask errorChan taskConfig)
-      loopTask errorChan taskConfig = do
-        outcome <- runTask taskConfig
-        case outcome of
-          Right _     -> loopTask errorChan taskConfig
-          Left error' -> do
-            Chan.writeChan errorChan error'
-            let newTaskConfig = _onError error' taskConfig
-            loopTask errorChan newTaskConfig
-      makeExceptionHandlers unmask errorChan taskConfig =
-        let
-          terminate = return ()
-          restart = do
-            Concurrent.threadDelay errorIntervalMicroseconds
-            loopTaskAndCatchExceptions unmask errorChan taskConfig
-        in
-        -- Mask 'AsyncException's and terminate the task.
-        [ Exception.Handler $
-            (\(e :: AsyncException) -> terminate)
-        -- Mask all other exceptions and restart the task.
-        , Exception.Handler $
-            (\(e :: SomeException) -> restart)
-        ]
+  -> n (Process error')
+fork (Config {..}) initialTaskConfig task =
+  MonadIO.liftIO $ do
+    errorChan <- Chan.newChan
+    terminationLock <- Lock.newAcquired
+    threadId <- Concurrent.forkIO $ do
+      loop errorChan initialTaskConfig
+      Lock.release terminationLock
+    return $ Process terminationLock threadId errorChan
+  where
+    errorIntervalMicroseconds =
+      fromIntegral $ Time.toMicroseconds $ Time.fromSeconds _errorInterval
+    onceConfig =
+      Task.Once.newConfig _logger _toIO _exceptionHandlers
+    loop errorChan taskConfig = do
+      result0 <- Task.Once.run onceConfig taskConfig task
+      case result0 of
+        Left error' -> do
+          Chan.writeChan errorChan error'
+          Concurrent.threadDelay errorIntervalMicroseconds
+          let newTaskConfig = _mapConfigOnError error' taskConfig
+          loop errorChan newTaskConfig
+        Right _ -> loop errorChan taskConfig

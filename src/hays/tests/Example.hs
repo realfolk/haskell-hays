@@ -2,6 +2,7 @@
 
 module Main where
 
+import           Control.Exception      (Exception)
 import qualified Control.Exception      as Exception
 import qualified Control.Monad.IO.Class as Monad.IO
 import qualified Data.ByteString.Lazy   as ByteString.Lazy
@@ -17,19 +18,25 @@ import           HAYS.Server.Router     (Router)
 import qualified HAYS.Server.Router     as Router
 import           HAYS.Task              (TaskT)
 import qualified HAYS.Task              as Task
-import qualified HAYS.Task.Forever      as Task
+import qualified HAYS.Task.Forever      as Task.Forever
 import           Lib.UUID               (UUID)
 import qualified Network.HTTP.Types     as HTTP
 
 serverTaskName = "server"
 
 main =
-  Exception.bracket (Task.forever config () server) Task.kill Task.waitUntilTerminated
+  Task.Forever.run config print () server
     where
       config =
-        Task.defaultConfig serverTaskName (\_ io -> io)
-          & Task.setLogger (taskLogger serverTaskName Nothing)
-          & Task.setErrorInterval 12
+        Task.Forever.defaultConfig (\_ io -> io) (const ())
+          & Task.Forever.setLogger (taskLogger serverTaskName Nothing)
+          & Task.Forever.setErrorInterval 12
+
+-- * Test Exceptions
+
+data TestException = TestException deriving (Show)
+
+instance Exception TestException
 
 -- * Task
 
@@ -37,9 +44,7 @@ type Config = ()
 
 type Error = ()
 
-type ServerM a = TaskT Config Error IO a
-
-server :: ServerM ()
+server :: TaskT Config Error IO ()
 server = do
   Task.info ["starting server"]
   Task.warn ["starting server"]

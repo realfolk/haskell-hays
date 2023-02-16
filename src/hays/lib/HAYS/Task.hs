@@ -1,9 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module HAYS.Task
     ( Except.catchError
+    , Except.liftEither
     , Except.throwError
-    , Logger.Level (..)
     , Reader.ask
     , Reader.asks
     , Reader.liftIO
@@ -57,11 +55,11 @@ runTaskT logger config (TaskT m) = do
   let environment = Environment config logger
   Except.runExceptT (Reader.runReaderT m environment)
 
--- ** Logging
+-- ** Logger
 
-defaultLogger :: Text -> Logger
-defaultLogger name =
-  Logger.defaultNamespace [Logger.plain name] Logger.terminal
+defaultLogger :: Logger
+defaultLogger =
+  Logger.defaultNamespace [] Logger.terminal
 
 info :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
 info = log' Logger.info
@@ -75,7 +73,7 @@ error' = log' Logger.error'
 debug :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
 debug = log' Logger.debug
 
-getLogger :: MonadIO m  => TaskT config error' m Logger
+getLogger :: Monad m => TaskT config error' m Logger
 getLogger = TaskT $ do
   (Environment _ logger) <- Reader.ask
   return logger
@@ -86,7 +84,7 @@ localLogger modifyLogger (TaskT m) = TaskT $ Reader.local modifyEnvironment m
     modifyEnvironment (Environment config logger) =
       Environment config (modifyLogger logger)
 
--- *** Internal
+-- ** Internal
 
 log' :: (MonadIO m)  => (Logger -> [Logger.Section] -> IO ()) -> [Logger.Section] -> TaskT config error' m ()
 log' getLogFunction sections = do
