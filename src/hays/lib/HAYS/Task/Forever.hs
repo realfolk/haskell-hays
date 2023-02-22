@@ -25,7 +25,7 @@ import qualified Control.Concurrent.Chan as Chan
 import           Control.Exception       (SomeException)
 import qualified Control.Exception       as Exception
 import           Control.Monad.IO.Class  (MonadIO)
-import qualified Control.Monad.IO.Class  as MonadIO
+import qualified Control.Monad.IO.Class  as Monad.IO
 import           HAYS.Logger             (Logger)
 import           HAYS.Task               (TaskT)
 import qualified HAYS.Task               as Task
@@ -45,13 +45,13 @@ data Process error'
       }
 
 wait :: MonadIO m => Process error' -> m ()
-wait process = MonadIO.liftIO $ do
+wait process = Monad.IO.liftIO $ do
   let lock = _terminationLock process
   Lock.acquire lock
   Lock.release lock
 
 kill :: MonadIO m => Process error' -> m ()
-kill = MonadIO.liftIO . Concurrent.killThread . _threadId
+kill = Monad.IO.liftIO . Concurrent.killThread . _threadId
 
 getNextError :: Process error' -> IO error'
 getNextError = Chan.readChan . _errorChan
@@ -118,7 +118,7 @@ run
   -> TaskT taskConfig error' m a
   -> n ()
 run foreverConfig handleError taskConfig task =
-  MonadIO.liftIO $ Exception.bracket acquire release action
+  Monad.IO.liftIO $ Exception.bracket acquire release action
     where
       acquire = do
         process <- fork foreverConfig taskConfig task
@@ -141,7 +141,7 @@ fork
   -> TaskT taskConfig error' m a
   -> n (Process error')
 fork (Config {..}) initialTaskConfig task =
-  MonadIO.liftIO $ do
+  Monad.IO.liftIO $ do
     errorChan <- Chan.newChan
     terminationLock <- Lock.newAcquired
     threadId <- Concurrent.forkIO $ do

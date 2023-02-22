@@ -20,7 +20,7 @@ import qualified Control.Concurrent     as Concurrent
 import           Control.Exception      (SomeException)
 import qualified Control.Exception      as Exception
 import           Control.Monad.IO.Class (MonadIO)
-import qualified Control.Monad.IO.Class as MonadIO
+import qualified Control.Monad.IO.Class as Monad.IO
 import           HAYS.Logger            (Logger)
 import           HAYS.Task              (TaskT)
 import qualified HAYS.Task              as Task
@@ -35,12 +35,12 @@ data Process a
       }
 
 wait :: MonadIO m => Process a -> m a
-wait process = MonadIO.liftIO $ do
+wait process = Monad.IO.liftIO $ do
   let lock = _resultLock process
   Concurrent.readMVar lock
 
 kill :: MonadIO m => Process error' -> m ()
-kill = MonadIO.liftIO . Concurrent.killThread . _threadId
+kill = Monad.IO.liftIO . Concurrent.killThread . _threadId
 
 -- * Config
 
@@ -91,7 +91,7 @@ run
   -> TaskT taskConfig error' m a
   -> n (Either error' a)
 run onceConfig taskConfig task =
-  MonadIO.liftIO $ Exception.bracket acquire release action
+  Monad.IO.liftIO $ Exception.bracket acquire release action
     where
       acquire = fork onceConfig taskConfig task
       release = kill
@@ -103,7 +103,7 @@ fork
   -> taskConfig
   -> TaskT taskConfig error' m a
   -> n (Process (Either error' a))
-fork (Config {..}) taskConfig task = MonadIO.liftIO $ do
+fork (Config {..}) taskConfig task = Monad.IO.liftIO $ do
   resultLock <- Concurrent.newEmptyMVar
   threadId <- Concurrent.forkIO $ do
     let executeTask = _toIO taskConfig $ Task.runTaskT _logger taskConfig task
