@@ -30,7 +30,6 @@ main =
       config =
         Task.Forever.defaultConfig (\_ io -> io) (const ())
           & Task.Forever.setLogger (taskLogger serverTaskName Nothing)
-          & Task.Forever.setErrorInterval 12
 
 -- * Test Exceptions
 

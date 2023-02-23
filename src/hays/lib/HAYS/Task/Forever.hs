@@ -2,20 +2,24 @@
 
 module HAYS.Task.Forever
     ( Config
-    , OnError
+    , IterationOutcome
     , Process
     , ToIO
     , defaultConfig
+    , delayedLoop
     , fork
     , getNextError
     , kill
+    , loop
     , newConfig
     , run
-    , setErrorInterval
     , setExceptionHandlers
     , setLogger
-    , setMapConfigOnError
+    , setOnIterationResult
     , setToIO
+    , terminate
+    , updateTaskConfigAndDelayedLoop
+    , updateTaskConfigAndLoop
     , wait
     ) where
 
@@ -24,13 +28,14 @@ import           Control.Concurrent.Chan (Chan)
 import qualified Control.Concurrent.Chan as Chan
 import           Control.Exception       (SomeException)
 import qualified Control.Exception       as Exception
+import           Control.Monad           (when)
 import           Control.Monad.IO.Class  (MonadIO)
 import qualified Control.Monad.IO.Class  as Monad.IO
 import           HAYS.Logger             (Logger)
 import           HAYS.Task               (TaskT)
 import qualified HAYS.Task               as Task
 import qualified HAYS.Task.Once          as Task.Once
-import           HAYS.Task.Types         (OnError, ToIO)
+import           HAYS.Task.Types         (ToIO)
 import           Lib.Concurrent.Lock     (Lock)
 import qualified Lib.Concurrent.Lock     as Lock
 import qualified Lib.Time                as Time
@@ -61,9 +66,8 @@ getNextError = Chan.readChan . _errorChan
 data Config taskConfig error' m a
   = Config
       { _logger            :: Logger
-      , _errorInterval     :: Time.Seconds
-      , _toIO              :: ToIO taskConfig m a
-      , _mapConfigOnError  :: OnError error' (taskConfig -> taskConfig)
+      , _toIO              :: ToIO taskConfig m (Either error' a)
+      , _onIterationResult :: Either error' a -> IterationOutcome taskConfig
       , _exceptionHandlers :: [Exception.Handler error']
       }
 
@@ -71,23 +75,21 @@ data Config taskConfig error' m a
 
 newConfig
   :: Logger
-  -> Time.Seconds
-  -> ToIO taskConfig m a
-  -> OnError error' (taskConfig -> taskConfig)
+  -> ToIO taskConfig m (Either error' a)
+  -> (Either error' a -> IterationOutcome taskConfig)
   -> [Exception.Handler error']
   -> Config taskConfig error' m a
 newConfig = Config
 
 defaultConfig
-  :: ToIO taskConfig m a
+  :: ToIO taskConfig m (Either error' a)
   -> (SomeException -> error')
   -> Config taskConfig error' m a
 defaultConfig toIO onSomeException =
-  Config
+  newConfig
     Task.defaultLogger
-    0
     toIO
-    (const id)
+    (either (const terminate) (const loop))
     [ Exception.Handler (return . onSomeException)
     ]
 
@@ -96,23 +98,41 @@ defaultConfig toIO onSomeException =
 setLogger :: Logger -> Config taskConfig error' m a -> Config taskConfig error' m a
 setLogger logger config = config { _logger = logger }
 
-setErrorInterval :: Time.Seconds -> Config taskConfig error' m a -> Config taskConfig error' m a
-setErrorInterval errorInterval config = config { _errorInterval = errorInterval }
-
-setToIO :: ToIO taskConfig m a -> Config taskConfig error' m a -> Config taskConfig error' m a
+setToIO :: ToIO taskConfig m (Either error' a) -> Config taskConfig error' m a -> Config taskConfig error' m a
 setToIO toIO config = config { _toIO = toIO }
 
-setMapConfigOnError :: OnError error' (taskConfig -> taskConfig) -> Config taskConfig error' m a -> Config taskConfig error' m a
-setMapConfigOnError onError config = config { _mapConfigOnError = onError }
+setOnIterationResult :: (Either error' a -> IterationOutcome taskConfig) -> Config taskConfig error' m a -> Config taskConfig error' m a
+setOnIterationResult onIterationResult config = config { _onIterationResult = onIterationResult }
 
 setExceptionHandlers :: [Exception.Handler error'] -> Config taskConfig error' m a -> Config taskConfig error' m a
 setExceptionHandlers exceptionHandlers config = config { _exceptionHandlers = exceptionHandlers }
+
+-- * IterationOutcome
+
+data IterationOutcome taskConfig
+  = Terminate
+  | Loop Time.Milliseconds (taskConfig -> taskConfig)
+
+terminate :: IterationOutcome taskConfig
+terminate = Terminate
+
+loop :: IterationOutcome taskConfig
+loop = Loop 0 id
+
+delayedLoop :: Time.Milliseconds -> IterationOutcome taskConfig
+delayedLoop = flip Loop id
+
+updateTaskConfigAndLoop :: (taskConfig -> taskConfig) -> IterationOutcome taskConfig
+updateTaskConfigAndLoop updateTaskConfig = Loop 0 updateTaskConfig
+
+updateTaskConfigAndDelayedLoop :: Time.Milliseconds -> (taskConfig -> taskConfig) -> IterationOutcome taskConfig
+updateTaskConfigAndDelayedLoop = Loop
 
 -- * Execution
 
 run
   :: (Monad m, MonadIO n)
-  => Config taskConfig error' m (Either error' a)
+  => Config taskConfig error' m a
   -> (error' -> IO ())
   -> taskConfig
   -> TaskT taskConfig error' m a
@@ -136,7 +156,7 @@ run foreverConfig handleError taskConfig task =
 
 fork
   :: (Monad m, MonadIO n)
-  => Config taskConfig error' m (Either error' a)
+  => Config taskConfig error' m a
   -> taskConfig
   -> TaskT taskConfig error' m a
   -> n (Process error')
@@ -149,16 +169,20 @@ fork (Config {..}) initialTaskConfig task =
       Lock.release terminationLock
     return $ Process terminationLock threadId errorChan
   where
-    errorIntervalMicroseconds =
-      fromIntegral $ Time.toMicroseconds $ Time.fromSeconds _errorInterval
     onceConfig =
       Task.Once.newConfig _logger _toIO _exceptionHandlers
     loop errorChan taskConfig = do
-      result0 <- Task.Once.run onceConfig taskConfig task
-      case result0 of
-        Left error' -> do
-          Chan.writeChan errorChan error'
-          Concurrent.threadDelay errorIntervalMicroseconds
-          let newTaskConfig = _mapConfigOnError error' taskConfig
+      -- Run the task.
+      result <- Task.Once.run onceConfig taskConfig task
+      -- Broadcast any errors on the errorChan.
+      either (Chan.writeChan errorChan) (const (return ())) result
+      -- Handle the IterationOutcome.
+      let iterationOutcome = _onIterationResult result
+      case iterationOutcome of
+        Terminate ->
+          return ()
+        Loop interval updateTaskConfig -> do
+          let intervalMicroseconds = fromIntegral $ Time.toMicroseconds $ Time.fromMilliseconds interval
+          when (interval > 0) $ Concurrent.threadDelay intervalMicroseconds
+          let newTaskConfig = updateTaskConfig taskConfig
           loop errorChan newTaskConfig
-        Right _ -> loop errorChan taskConfig
