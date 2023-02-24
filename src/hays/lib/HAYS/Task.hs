@@ -59,18 +59,18 @@ runTaskT logger config (TaskT m) = do
 
 defaultLogger :: Logger
 defaultLogger =
-  Logger.defaultNamespace [] Logger.terminal
+  Logger.defaultNamespace [] Logger.defaultTerminal
 
-info :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
+info :: (MonadIO m) => Logger.Record -> TaskT config error' m ()
 info = log' Logger.info
 
-warn :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
+warn :: (MonadIO m) => Logger.Record -> TaskT config error' m ()
 warn = log' Logger.warn
 
-error' :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
+error' :: (MonadIO m) => Logger.Record -> TaskT config error' m ()
 error' = log' Logger.error'
 
-debug :: (MonadIO m) => [Logger.Section] -> TaskT config error' m ()
+debug :: (MonadIO m) => Logger.Record -> TaskT config error' m ()
 debug = log' Logger.debug
 
 getLogger :: Monad m => TaskT config error' m Logger
@@ -86,10 +86,10 @@ localLogger modifyLogger (TaskT m) = TaskT $ Reader.local modifyEnvironment m
 
 -- ** Internal
 
-log' :: (MonadIO m)  => (Logger -> [Logger.Section] -> IO ()) -> [Logger.Section] -> TaskT config error' m ()
-log' getLogFunction sections = do
+log' :: (MonadIO m)  => (Logger -> Logger.Record -> IO ()) -> Logger.Record -> TaskT config error' m ()
+log' getLogFunction records = do
   logger <- getLogger
-  Reader.liftIO $ getLogFunction logger sections
+  Reader.liftIO $ getLogFunction logger records
 
 -- * Environment
 

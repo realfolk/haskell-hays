@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -6,16 +7,19 @@ module HAYS.Logger
     , ColorIntensity (..)
     , Level (..)
     , Logger
-    , Section
+    , Record
     , Style (..)
     , debug
     , defaultNamespace
+    , defaultTerminal
     , error'
+    , formatted
     , fromDate
     , fromDays
     , fromHours
     , fromIntegral
     , fromLevel
+    , fromList
     , fromMicroseconds
     , fromMilliseconds
     , fromMinutes
@@ -34,18 +38,19 @@ module HAYS.Logger
     , namespace
     , plain
     , prefix
-    , sectionToText
+    , recordToText
     , setBackground
     , setDefaultLevelFormatting
     , setForeground
     , setStyle
-    , styled
     , suffix
     , terminal
     , warn
     ) where
 
 import qualified Data.List               as List
+import           Data.List.NonEmpty      (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty      as NonEmpty
 import           Data.Text               (Text)
 import qualified Data.Text               as Text
 import qualified Data.Text.IO            as Text.IO
@@ -66,97 +71,113 @@ import qualified System.IO               as IO
 -- * Logger
 
 newtype Logger
-  = Logger (Level -> [Section] -> IO ())
+  = Logger (Level -> Record -> IO ())
 
 -- ** Constructors
 
-terminal :: Logger
-terminal =
-  Logger $ \level sections ->
-    Text.IO.hPutStrLn (handle level) $ sectionsToText sections
+terminal :: IO.Handle -> IO.Handle -> Logger
+terminal stdout stderr =
+  Logger $ \level record -> do
+    Text.IO.hPutStrLn (handle level) $ recordToText record
   where
-    sectionsToText :: [Section] -> Text
-    sectionsToText = foldr ((<>) . sectionToText) ""
     handle level =
       case level of
-        Error -> IO.stderr
-        _     -> IO.stdout
+        Error -> stderr
+        _     -> stdout
+
+defaultTerminal :: Logger
+defaultTerminal =
+  terminal IO.stdout IO.stderr
 
 -- ** Logging Functions
 
-info :: Logger -> [Section] -> IO ()
+info :: Logger -> Record -> IO ()
 info (Logger f) = f Info
 
-warn :: Logger -> [Section] -> IO ()
+warn :: Logger -> Record -> IO ()
 warn (Logger f) = f Warn
 
-error' :: Logger -> [Section] -> IO ()
+error' :: Logger -> Record -> IO ()
 error' (Logger f) = f Error
 
-debug :: Logger -> [Section] -> IO ()
+debug :: Logger -> Record -> IO ()
 debug (Logger f) = f Debug
 
 -- ** Modifiers
 
-prefix :: (Level -> [Section]) -> Logger -> Logger
-prefix getPrefixSections (Logger f) =
-  Logger $ \level sections ->
-    f level (getPrefixSections level <> sections)
+prefix :: (Level -> Record) -> Logger -> Logger
+prefix getPrefixRecord (Logger f) =
+  Logger $ \level record ->
+    f level (getPrefixRecord level <> record)
 
-namespace :: Section -> Section -> Section -> (Level -> [Section]) -> Logger -> Logger
-namespace left right separator getNamespaceSections =
-  prefix (\level -> left : (List.intersperse separator $ getNamespaceSections level) <> [right])
+namespace :: Record -> Record -> Record -> (Level -> [Record]) -> Logger -> Logger
+namespace left right separator getNamespaceRecords =
+  prefix (\level -> left <> fromList (List.intersperse separator (getNamespaceRecords level)) <> right)
 
-defaultNamespace :: [Section] -> Logger -> Logger
-defaultNamespace sections =
+defaultNamespace :: [Record] -> Logger -> Logger
+defaultNamespace records =
   namespace left right' separator $ \level ->
-    map (setDefaultLevelFormatting level) (fromLevel False level : sections)
+    map (setDefaultLevelFormatting level) (fromLevel False level : records)
   where
     setGreyForeground = setForeground (Black Bright)
     left = setGreyForeground "["
     right' = setGreyForeground "] "
     separator = setGreyForeground ":"
 
-suffix :: (Level -> [Section]) -> Logger -> Logger
-suffix getSuffixSections (Logger f) =
-  Logger $ \level sections ->
-    f level (sections <> getSuffixSections level)
+suffix :: (Level -> Record) -> Logger -> Logger
+suffix getSuffixRecord (Logger f) =
+  Logger $ \level record ->
+    f level (record <> getSuffixRecord level)
 
 -- * Level
 
 data Level = Info | Warn | Error | Debug
 
--- * Section
+-- * Record
 
-data Section
-  = Section
+data Record
+  = Plain !Text
+  | Formatted
       { _foreground :: !Color
       , _background :: !Color
       , _style      :: !Style
       , _text       :: !Text
       }
+  | Multiple !(NonEmpty Record)
 
--- | The 'IsString' instance of 'Section' constructs a "plain" 'Section' with no
+-- | The 'IsString' instance of 'Record' constructs a "plain" 'Record' with no
 -- 'Color' or 'Style'.
-instance GHC.Exts.IsString Section where
+instance GHC.Exts.IsString Record where
   fromString = plain . GHC.Exts.fromString
 
--- | The 'Semigroup' instance of 'Section' retains the '_foreground', '_background'
+-- | The 'Semigroup' instance of 'Record' retains the '_foreground', '_background'
 -- and '_style' of the first argument and disregards those values of the second
--- argument. It calls '<>' on the internal '_text' values of each 'Section' to
+-- argument. It calls '<>' on the internal '_text' values of each 'Record' to
 -- concatenate them.
-instance Semigroup Section where
-  (<>) a b = a { _text = _text a <> _text b }
+instance Semigroup Record where
+  (<>) a b =
+    case (a, b) of
+      (Plain a', Plain b')       -> Plain $ a' <> b'
+      (Multiple as, Multiple bs) -> Multiple $ as <> bs
+      (Multiple as, _)           -> Multiple $ as <> [b]
+      (_, Multiple bs)           -> Multiple $ NonEmpty.cons a bs
+      _                          -> Multiple [a, b]
 
 -- ** Constructors
 
-styled :: Color -> Color -> Style -> Text -> Section
-styled = Section
+plain :: Text -> Record
+plain = Plain
 
-plain :: Text -> Section
-plain = styled Default Default Regular
+formatted :: Color -> Color -> Style -> Text -> Record
+formatted = Formatted
 
-fromLevel :: Bool -> Level -> Section
+fromList :: [Record] -> Record
+fromList records =
+  case records of
+    []     -> plain ""
+    (s:ss) -> Multiple $ s :| ss
+
+fromLevel :: Bool -> Level -> Record
 fromLevel fixedWidth level =
   plain $ justify $ case level of
     Info  -> "info"
@@ -166,86 +187,113 @@ fromLevel fixedWidth level =
   where
     justify = if fixedWidth then Text.justifyLeft 5 ' ' else id
 
-fromShow :: Show a => a -> Section
+fromShow :: Show a => a -> Record
 fromShow = plain . Text.pack . show
 
-fromIntegral :: Integral a => a -> Section
+fromIntegral :: Integral a => a -> Record
 fromIntegral = fromShow . toInteger
 
-fromUUID :: UUID -> Section
+fromUUID :: UUID -> Record
 fromUUID = plain . UUID.encodeBase64TextStrict
 
-fromDate :: Date -> Section
+fromDate :: Date -> Record
 fromDate =
   plain . Date.Formatter.format (Date.Formatter.iso8601Date Date.Formatter.Day)
 
-fromTimeAndZone :: Time.Zone -> Time -> Section
+fromTimeAndZone :: Time.Zone -> Time -> Record
 fromTimeAndZone zone =
   plain . Time.Formatter.format (Time.Formatter.iso8601DateAndTime Time.Formatter.Day Time.Formatter.Millisecond) zone
 
-fromTimeUTC :: Time -> Section
+fromTimeUTC :: Time -> Record
 fromTimeUTC = fromTimeAndZone Time.utc
 
-fromYears :: Time.Years -> Section
+fromYears :: Time.Years -> Record
 fromYears = (<> "y") . fromIntegral
 
-fromMonth :: Time.Month -> Section
+fromMonth :: Time.Month -> Record
 fromMonth = plain . Month.toText
 
-fromWeeks :: Time.Weeks -> Section
+fromWeeks :: Time.Weeks -> Record
 fromWeeks = (<> "w") . fromIntegral
 
-fromWeekday :: Time.Weekday -> Section
+fromWeekday :: Time.Weekday -> Record
 fromWeekday = plain . Weekday.toText
 
-fromDays :: Time.Days -> Section
+fromDays :: Time.Days -> Record
 fromDays = (<> "d") . fromIntegral
 
-fromHours :: Time.Hours -> Section
+fromHours :: Time.Hours -> Record
 fromHours = (<> "h") . fromIntegral
 
-fromMinutes :: Time.Minutes -> Section
+fromMinutes :: Time.Minutes -> Record
 fromMinutes = (<> "m") . fromIntegral
 
-fromSeconds :: Time.Seconds -> Section
+fromSeconds :: Time.Seconds -> Record
 fromSeconds = (<> "s") . fromIntegral
 
-fromMilliseconds :: Time.Milliseconds -> Section
+fromMilliseconds :: Time.Milliseconds -> Record
 fromMilliseconds = (<> "ms") . fromIntegral
 
-fromMicroseconds :: Time.Microseconds -> Section
+fromMicroseconds :: Time.Microseconds -> Record
 fromMicroseconds = (<> "µs") . fromIntegral
 
-fromNanoseconds :: Time.Nanoseconds -> Section
+fromNanoseconds :: Time.Nanoseconds -> Record
 fromNanoseconds = (<> "ns") . fromIntegral
 
-fromPicoseconds :: Time.Picoseconds -> Section
+fromPicoseconds :: Time.Picoseconds -> Record
 fromPicoseconds = (<> "ps") . fromIntegral
 
 -- ** Converters
 
-sectionToText :: Section -> Text
-sectionToText (Section {..}) =
-  mconcat
-    [ colorToSequence Foreground _foreground
-    , colorToSequence Background _background
-    , styleToSequence _style
-    , _text
-    , resetSequence
-    ]
+recordToText :: Record -> Text
+recordToText record =
+  case record of
+    Plain text -> text
+    Formatted {..} ->
+      mconcat
+        [ colorToSequence Foreground _foreground
+        , colorToSequence Background _background
+        , styleToSequence _style
+        , _text
+        , resetSequence
+        ]
+    Multiple records ->
+      foldr ((<>) . recordToText) "" records
+
 
 -- ** Setters
 
-setForeground :: Color -> Section -> Section
-setForeground color section = section { _foreground = color }
+setForeground :: Color -> Record -> Record
+setForeground color record =
+  case record of
+    Plain t ->
+      formatted color Default Regular t
+    Formatted {..} ->
+      let _foreground = color in Formatted {..}
+    Multiple records ->
+      Multiple $ fmap (setForeground color) records
 
-setBackground :: Color -> Section -> Section
-setBackground color section = section { _background = color }
+setBackground :: Color -> Record -> Record
+setBackground color record =
+  case record of
+    Plain t ->
+      formatted Default color Regular t
+    Formatted {..} ->
+      let _background = color in Formatted {..}
+    Multiple records ->
+      Multiple $ fmap (setBackground color) records
 
-setStyle :: Style -> Section -> Section
-setStyle style section = section { _style = style }
+setStyle :: Style -> Record -> Record
+setStyle style record =
+  case record of
+    Plain t ->
+      formatted Default Default style t
+    Formatted {..} ->
+      let _style = style in Formatted {..}
+    Multiple records ->
+      Multiple $ fmap (setStyle style) records
 
-setDefaultLevelFormatting :: Level -> Section -> Section
+setDefaultLevelFormatting :: Level -> Record -> Record
 setDefaultLevelFormatting level =
   setStyle Regular
     . setBackground Default

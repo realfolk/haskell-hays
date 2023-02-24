@@ -2,29 +2,28 @@
 
 module Main where
 
-import           Control.Exception      (Exception)
-import qualified Control.Exception      as Exception
-import qualified Control.Monad.IO.Class as Monad.IO
-import qualified Data.ByteString.Lazy   as ByteString.Lazy
-import           Data.Function          ((&))
-import           Data.Text              (Text)
-import qualified Data.Text.Encoding     as Text.Encoding
-import           HAYS.Logger            (Logger)
-import qualified HAYS.Logger            as Logger
-import qualified HAYS.Server            as Server
-import           HAYS.Server.Response   (Response)
-import qualified HAYS.Server.Response   as Response
-import           HAYS.Server.Router     (Router)
-import qualified HAYS.Server.Router     as Router
-import           HAYS.Task              (TaskT)
-import qualified HAYS.Task              as Task
-import qualified HAYS.Task.Forever      as Task.Forever
-import           Lib.UUID               (UUID)
-import qualified Network.HTTP.Types     as HTTP
+import           Control.Exception    (Exception)
+import qualified Control.Exception    as Exception
+import qualified Data.ByteString.Lazy as ByteString.Lazy
+import           Data.Function        ((&))
+import           Data.Text            (Text)
+import qualified Data.Text.Encoding   as Text.Encoding
+import           HAYS.Logger          (Logger)
+import qualified HAYS.Logger          as Logger
+import qualified HAYS.Server          as Server
+import           HAYS.Server.Response (Response)
+import qualified HAYS.Server.Response as Response
+import           HAYS.Server.Router   (Router)
+import qualified HAYS.Server.Router   as Router
+import           HAYS.Task            (TaskT)
+import qualified HAYS.Task            as Task
+import qualified HAYS.Task.Forever    as Task.Forever
+import           Lib.UUID             (UUID)
+import qualified Network.HTTP.Types   as HTTP
 
 serverTaskName = "server"
 
-main =
+main = do
   Task.Forever.run config print () server
     where
       config =
@@ -45,24 +44,23 @@ type Error = ()
 
 server :: TaskT Config Error IO ()
 server = do
-  Task.info ["starting server"]
-  Task.warn ["starting server"]
-  Task.error' ["starting server"]
-  Task.debug ["starting server"]
+  Task.info "starting server"
+  Task.warn "starting server"
+  Task.error' "starting server"
+  Task.debug "starting server"
   Server.defaultServer
-    & Server.setLogger (taskLogger serverTaskName . Just)
+    & Server.setLogger (taskLogger serverTaskName. Just)
     & Server.setRouter router
     & Server.setOnMsg onMsg
     & Server.listen
-    & Monad.IO.liftIO
+    & Task.liftIO
 
 router :: Router Msg
 router = Router.combine
   [ Router.isPathEnd >> return Home
   , do
     Router.nextPathSectionIs (== "posts")
-    blogMsg <- blogRouter
-    return $ Blog blogMsg
+    Blog <$> blogRouter
   , return NotFound
   ]
 
@@ -70,6 +68,7 @@ data Msg
   = Home
   | Blog BlogMsg
   | NotFound
+  deriving (Show)
 
 onMsg :: Msg -> IO Response
 onMsg msg =
@@ -85,6 +84,7 @@ data BlogMsg
   = CreatePost
   | GetAllPosts
   | GetPost Text
+  deriving (Show)
 
 blogRouter :: Router BlogMsg
 blogRouter =
@@ -115,9 +115,8 @@ onBlogMsg msg =
 
 taskLogger :: Text -> Maybe UUID -> Logger
 taskLogger name maybeRequestID =
-  Logger.defaultNamespace sections Logger.terminal
-    where
-      sections =
+  let records =
         case maybeRequestID of
           Nothing        -> [Logger.plain name]
           Just requestID -> [Logger.plain name, Logger.fromUUID requestID]
+   in Logger.defaultNamespace records Logger.defaultTerminal

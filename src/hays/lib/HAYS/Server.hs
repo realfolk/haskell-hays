@@ -19,10 +19,11 @@ module HAYS.Server
     , setWarpTLSSettings
     ) where
 
+import           Control.Exception           (SomeException)
+import qualified Control.Exception           as Exception
 import           Data.Function               ((&))
 import qualified Data.Text.Encoding          as Text.Encoding
 import           Data.Word                   (Word16)
-import           GHC.Exception.Type          (SomeException)
 import           HAYS.Logger                 (Logger)
 import qualified HAYS.Logger                 as Logger
 import           HAYS.Server.Request         (Request)
@@ -68,9 +69,9 @@ defaultServer =
     id
     defaultLogger
     Router.next
-    (\_ -> (pure defaultResponse))
-    (\_ -> defaultResponse)
-    (\_ -> return ())
+    (const (pure defaultResponse))
+    (const defaultResponse)
+    (const (return ()))
   where
     defaultResponse =
       Response.new
@@ -158,7 +159,7 @@ type Port = Word16
 
 defaultLogger :: UUID -> Logger
 defaultLogger requestID =
-  Logger.defaultNamespace [Logger.fromUUID requestID] Logger.terminal
+  Logger.defaultNamespace [Logger.fromUUID requestID] Logger.defaultTerminal
 
 -- ** Internal
 
@@ -166,38 +167,40 @@ nextLogID :: IO UUID
 nextLogID = UUID.nextRandom
 
 logRequest :: Logger -> Request -> IO ()
-logRequest logger request =
-  Logger.debug logger sections
+logRequest logger request = do
+  Logger.debug logger record
     where
       query = Request.getQuery request
-      sections =
-        [ "<- "
-        , Logger.setStyle Logger.Bold
-            $ Logger.plain
-            $ Text.Encoding.decodeUtf8
-            $ Request.getMethod request
-        , " "
-        , Logger.plain $ Path.toText $ Request.getPath request
-        , setGreyForeground
-            $ if Query.isEmpty query
-               then ""
-               else "?" <> Logger.plain (Query.toText query)
-        ]
+      record =
+        Logger.fromList
+          [ "<- "
+          , Logger.setStyle Logger.Bold
+              $ Logger.plain
+              $ Text.Encoding.decodeUtf8
+              $ Request.getMethod request
+          , " "
+          , Logger.plain $ Path.toText $ Request.getPath request
+          , setGreyForeground
+              $ if Query.isEmpty query
+                 then ""
+                 else "?" <> Logger.plain (Query.toText query)
+          ]
 
 logResponse :: Logger -> Response -> Time -> IO ()
 logResponse logger response elapsedTime =
-  Logger.debug logger sections
+  Logger.debug logger record
     where
-      sections =
-        [ "-> "
-        , Logger.fromShow statusCode
-            & Logger.setForeground (statusColor statusCode)
-            & Logger.setStyle Logger.Bold
-        , " "
-        , setGreyForeground
-            $ Logger.fromMilliseconds
-            $ Time.toMilliseconds elapsedTime
-        ]
+      record =
+        Logger.fromList
+          [ "-> "
+          , Logger.fromShow statusCode
+              & Logger.setForeground (statusColor statusCode)
+              & Logger.setStyle Logger.Bold
+          , " "
+          , setGreyForeground
+              $ Logger.fromMilliseconds
+              $ Time.toMilliseconds elapsedTime
+          ]
       statusCode = HTTP.statusCode $ Response.getStatus response
       statusColor statusCode
         | statusCode >= 400 = Logger.Red Logger.Normal
@@ -205,5 +208,5 @@ logResponse logger response elapsedTime =
         | statusCode >= 200 = Logger.Green Logger.Normal
         | otherwise = Logger.Default
 
-setGreyForeground :: Logger.Section -> Logger.Section
+setGreyForeground :: Logger.Record -> Logger.Record
 setGreyForeground = Logger.setForeground (Logger.Black Logger.Bright)
