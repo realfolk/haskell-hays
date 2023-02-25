@@ -39,6 +39,7 @@ module HAYS.Logger
     , plain
     , prefix
     , recordToText
+    , removeFormatting
     , setBackground
     , setDefaultLevelFormatting
     , setForeground
@@ -303,6 +304,13 @@ setDefaultLevelFormatting level =
           Warn  -> Yellow Normal
           Error -> Red Normal
           Debug -> Blue Normal)
+
+removeFormatting :: Record -> Record
+removeFormatting record =
+  case record of
+    Plain _          -> record
+    Formatted {..}   -> Plain _text
+    Multiple records -> Multiple $ fmap removeFormatting records
 
 -- * Color
 
