@@ -36,6 +36,7 @@ module HAYS.Logger
     , fromYears
     , info
     , namespace
+    , new
     , plain
     , prefix
     , recordToText
@@ -45,7 +46,6 @@ module HAYS.Logger
     , setForeground
     , setStyle
     , suffix
-    , terminal
     , warn
     ) where
 
@@ -76,19 +76,17 @@ newtype Logger
 
 -- ** Constructors
 
-terminal :: IO.Handle -> IO.Handle -> Logger
-terminal stdout stderr =
+new :: (Level -> IO.Handle) -> Logger
+new getHandle =
   Logger $ \level record -> do
-    Text.IO.hPutStrLn (handle level) $ recordToText record
-  where
-    handle level =
-      case level of
-        Error -> stderr
-        _     -> stdout
+    Text.IO.hPutStrLn (getHandle level) $ recordToText record
 
 defaultTerminal :: Logger
 defaultTerminal =
-  terminal IO.stdout IO.stderr
+  new $ \level ->
+    case level of
+      Error -> IO.stderr
+      _     -> IO.stdout
 
 -- ** Logging Functions
 
@@ -146,15 +144,11 @@ data Record
       }
   | Multiple !(NonEmpty Record)
 
--- | The 'IsString' instance of 'Record' constructs a "plain" 'Record' with no
--- 'Color' or 'Style'.
+-- | The 'IsString' instance of 'Record' constructs a 'plain' 'Record'
+-- with no formatting.
 instance GHC.Exts.IsString Record where
   fromString = plain . GHC.Exts.fromString
 
--- | The 'Semigroup' instance of 'Record' retains the '_foreground', '_background'
--- and '_style' of the first argument and disregards those values of the second
--- argument. It calls '<>' on the internal '_text' values of each 'Record' to
--- concatenate them.
 instance Semigroup Record where
   (<>) a b =
     case (a, b) of
