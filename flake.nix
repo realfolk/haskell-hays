@@ -38,41 +38,10 @@
 
       haskellDependencies = p: [
         p.aeson
-        p.async
-        p.base58-bytestring
-        p.base64-bytestring
-        p.basement
-        p.bcrypt
         p.criterion
-        p.cryptonite
-        p.dotenv
-        p.envy
         p.haddock
         p.hspec
-        p.http-client
-        p.http-client-tls
         p.http-types
-        p.HUnit
-        p.lmdb
-        p.microlens
-        p.microstache
-        p.mime-types
-        p.network-uri
-        p.optparse-applicative
-        p.shakespeare
-        p.smtp-mail
-        p.strict-concurrency
-        p.tasty
-        p.tasty-hunit
-        p.tasty-hunit-adapter
-        p.tasty-quickcheck
-        p.tasty-smallcheck
-        p.temporary
-        p.text-trie
-        p.tls
-        p.tls-debug
-        p.turtle
-        p.uuid
         p.wai
         p.warp
         p.warp-tls

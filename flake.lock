@@ -422,23 +422,6 @@
         "type": "github"
       }
     },
-    "foundationSrc": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1646281943,
-        "narHash": "sha256-Q6OZgp3pQzV4GKufBt+AssBye/AHI9CGYT6F+StjnCg=",
-        "owner": "haskell-foundation",
-        "repo": "foundation",
-        "rev": "fc4daf9c869f903cec49b37177d1e1633ce01e58",
-        "type": "github"
-      },
-      "original": {
-        "owner": "haskell-foundation",
-        "repo": "foundation",
-        "rev": "fc4daf9c869f903cec49b37177d1e1633ce01e58",
-        "type": "github"
-      }
-    },
     "fugitive": {
       "flake": false,
       "locked": {
@@ -689,17 +672,17 @@
     "haskellLanguageServerSrc_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1652040601,
-        "narHash": "sha256-B8owNm17bd2ZixwpbU8+sA+wAajeY1QOWRf7dJifX0U=",
+        "lastModified": 1672051165,
+        "narHash": "sha256-j3XRQTWa7jsVlimaxFZNnlE9IzWII9Prj1/+otks5FQ=",
         "owner": "haskell",
         "repo": "haskell-language-server",
-        "rev": "9e1738e8c59e2ee5a4a0c17fca2154b936bb7a49",
+        "rev": "1916b5782d9f3204d25a1d8f94da4cfd83ae2607",
         "type": "github"
       },
       "original": {
         "owner": "haskell",
+        "ref": "1.9.0.0",
         "repo": "haskell-language-server",
-        "rev": "9e1738e8c59e2ee5a4a0c17fca2154b936bb7a49",
         "type": "github"
       }
     },
@@ -768,26 +751,23 @@
         "animalcaseSrc": "animalcaseSrc_2",
         "envySrc": "envySrc_2",
         "flakeUtils": "flakeUtils_6",
-        "foundationSrc": "foundationSrc",
         "ghcExactPrintSrc": "ghcExactPrintSrc_2",
         "haddockSrc": "haddockSrc_2",
         "haskellFilesystemSrc": "haskellFilesystemSrc_2",
         "haskellLanguageServerSrc": "haskellLanguageServerSrc_2",
-        "hieBiosSrc": "hieBiosSrc_2",
         "hsWeb3Src": "hsWeb3Src_2",
         "nixpkgs": "nixpkgs_9",
         "relapseSrc": "relapseSrc_2",
-        "retrieSrc": "retrieSrc_2",
         "stylishHaskellSrc": "stylishHaskellSrc_2",
         "textTrieSrc": "textTrieSrc_2"
       },
       "locked": {
         "dir": "lib/projects/haskell/packages/ghc-9.2",
-        "lastModified": 1659594746,
-        "narHash": "sha256-efc1Mm8XPMR+myBg9FapIyrWvKleP2LXK99zua50GBI=",
+        "lastModified": 1677313362,
+        "narHash": "sha256-omeKApu44O0y2/dxUBaUXl4fOVoIFb33digw+dtMna4=",
         "owner": "realfolk",
         "repo": "nix",
-        "rev": "bef02e8135fc6297852b769551e051d9be09542d",
+        "rev": "608e29cc45aee170c0f67bcbc73e45deda2c442a",
         "type": "github"
       },
       "original": {
@@ -872,23 +852,6 @@
       }
     },
     "hieBiosSrc": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1646689921,
-        "narHash": "sha256-rB0jhbAC1+zsqDfKiI42iDr/aplatDkkBvTzFNv4UdM=",
-        "owner": "haskell",
-        "repo": "hie-bios",
-        "rev": "0d1cdc3ea2a3b87588f24a28bd0da6dc93a952df",
-        "type": "github"
-      },
-      "original": {
-        "owner": "haskell",
-        "repo": "hie-bios",
-        "rev": "0d1cdc3ea2a3b87588f24a28bd0da6dc93a952df",
-        "type": "github"
-      }
-    },
-    "hieBiosSrc_2": {
       "flake": false,
       "locked": {
         "lastModified": 1646689921,
@@ -1423,17 +1386,17 @@
     },
     "nixpkgs_9": {
       "locked": {
-        "lastModified": 1652252629,
-        "narHash": "sha256-SvT64apetqc8P5nYp1/fOZvUmHUPdPFUZbhSpKy+1aI=",
+        "lastModified": 1677063315,
+        "narHash": "sha256-qiB4ajTeAOVnVSAwCNEEkoybrAlA+cpeiBxLobHndE8=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "d2fc6856824cb87742177eefc8dd534bdb6c3439",
+        "rev": "988cc958c57ce4350ec248d2d53087777f9e1949",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
+        "ref": "nixos-unstable",
         "repo": "nixpkgs",
-        "rev": "d2fc6856824cb87742177eefc8dd534bdb6c3439",
         "type": "github"
       }
     },
@@ -1842,23 +1805,6 @@
       }
     },
     "retrieSrc": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1651225668,
-        "narHash": "sha256-souU+Bio4VhkgdB52IF0pYJf/1bO4vTZnRO3FGwBeBU=",
-        "owner": "facebookincubator",
-        "repo": "retrie",
-        "rev": "6426f3da809c30009c134e357d552f3eb765c1f2",
-        "type": "github"
-      },
-      "original": {
-        "owner": "facebookincubator",
-        "repo": "retrie",
-        "rev": "6426f3da809c30009c134e357d552f3eb765c1f2",
-        "type": "github"
-      }
-    },
-    "retrieSrc_2": {
       "flake": false,
       "locked": {
         "lastModified": 1651225668,
