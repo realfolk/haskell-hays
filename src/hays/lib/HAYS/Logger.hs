@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module HAYS.Logger
     ( Color (..)
@@ -148,6 +149,15 @@ data Record
 -- with no formatting.
 instance GHC.Exts.IsString Record where
   fromString = plain . GHC.Exts.fromString
+
+instance GHC.Exts.IsList Record where
+  type Item Record = Record
+  fromList = HAYS.Logger.fromList
+  toList record =
+    case record of
+      Multiple records -> NonEmpty.toList records
+      _                -> [record]
+
 
 instance Semigroup Record where
   (<>) a b =

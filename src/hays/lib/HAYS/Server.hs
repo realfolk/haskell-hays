@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -168,39 +169,35 @@ nextLogID = UUID.nextRandom
 
 logRequest :: Logger -> Request -> IO ()
 logRequest logger request = do
-  Logger.debug logger record
+  Logger.debug logger
+    [ "<- "
+    , Logger.setStyle Logger.Bold
+        $ Logger.plain
+        $ Text.Encoding.decodeUtf8
+        $ Request.getMethod request
+    , " "
+    , Logger.plain $ Path.toText $ Request.getPath request
+    , setGreyForeground
+        $ if Query.isEmpty query
+           then ""
+           else "?" <> Logger.plain (Query.toText query)
+    ]
     where
       query = Request.getQuery request
-      record =
-        Logger.fromList
-          [ "<- "
-          , Logger.setStyle Logger.Bold
-              $ Logger.plain
-              $ Text.Encoding.decodeUtf8
-              $ Request.getMethod request
-          , " "
-          , Logger.plain $ Path.toText $ Request.getPath request
-          , setGreyForeground
-              $ if Query.isEmpty query
-                 then ""
-                 else "?" <> Logger.plain (Query.toText query)
-          ]
 
 logResponse :: Logger -> Response -> Time -> IO ()
 logResponse logger response elapsedTime =
-  Logger.debug logger record
+  Logger.debug logger
+    [ "-> "
+    , Logger.fromShow statusCode
+        & Logger.setForeground (statusColor statusCode)
+        & Logger.setStyle Logger.Bold
+    , " "
+    , setGreyForeground
+        $ Logger.fromMilliseconds
+        $ Time.toMilliseconds elapsedTime
+    ]
     where
-      record =
-        Logger.fromList
-          [ "-> "
-          , Logger.fromShow statusCode
-              & Logger.setForeground (statusColor statusCode)
-              & Logger.setStyle Logger.Bold
-          , " "
-          , setGreyForeground
-              $ Logger.fromMilliseconds
-              $ Time.toMilliseconds elapsedTime
-          ]
       statusCode = HTTP.statusCode $ Response.getStatus response
       statusColor statusCode
         | statusCode >= 400 = Logger.Red Logger.Normal
