@@ -37,6 +37,7 @@
       };
 
       haskellDependencies = p: [
+        # This package
         p.aeson
         p.criterion
         p.haddock
@@ -45,6 +46,13 @@
         p.wai
         p.warp
         p.warp-tls
+        # Upstream Dependencies
+        p.microlens
+        p.base58-bytestring
+        p.base64-bytestring
+        p.uuid
+        p.blaze-builder
+        p.network-uri
       ];
 
       defineProject = args:
