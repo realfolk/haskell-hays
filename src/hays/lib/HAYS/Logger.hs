@@ -17,7 +17,9 @@ module HAYS.Logger
     , formatted
     , fromDate
     , fromDays
+    , fromHandle
     , fromHours
+    , fromIO
     , fromIntegral
     , fromLevel
     , fromList
@@ -37,7 +39,6 @@ module HAYS.Logger
     , fromYears
     , info
     , namespace
-    , new
     , plain
     , prefix
     , recordToText
@@ -77,14 +78,17 @@ newtype Logger
 
 -- ** Constructors
 
-new :: (Level -> IO.Handle) -> Logger
-new getHandle =
-  Logger $ \level record -> do
-    Text.IO.hPutStrLn (getHandle level) $ recordToText record
+fromIO :: (Level -> Text -> IO ()) -> Logger
+fromIO action =
+  Logger $ \level -> action level . recordToText
+
+fromHandle :: (Level -> IO.Handle) -> Logger
+fromHandle getHandle =
+  fromIO (Text.IO.hPutStrLn . getHandle)
 
 defaultTerminal :: Logger
 defaultTerminal =
-  new $ \level ->
+  fromHandle $ \level ->
     case level of
       Error -> IO.stderr
       _     -> IO.stdout
@@ -131,7 +135,15 @@ suffix getSuffixRecord (Logger f) =
 
 -- * Level
 
-data Level = Info | Warn | Error | Debug
+data Level = Info | Warn | Error | Debug deriving (Eq)
+
+instance Show Level where
+  show level =
+    case level of
+      Info  -> "info"
+      Warn  -> "warn"
+      Error -> "error"
+      Debug -> "debug"
 
 -- * Record
 
@@ -184,11 +196,10 @@ fromList records =
 
 fromLevel :: Bool -> Level -> Record
 fromLevel fixedWidth level =
-  plain $ justify $ case level of
-    Info  -> "info"
-    Warn  -> "warn"
-    Error -> "error"
-    Debug -> "debug"
+  plain
+    $ justify
+    $ Text.pack
+    $ show level
   where
     justify = if fixedWidth then Text.justifyLeft 5 ' ' else id
 

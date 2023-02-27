@@ -4,6 +4,7 @@ module Test.HAYS.TaskSpec
     ( spec
     ) where
 
+import qualified Control.Concurrent     as Concurrent
 import           Control.Monad.Identity (Identity)
 import qualified Control.Monad.Identity as Identity
 import           Data.Text              (Text)
@@ -15,6 +16,10 @@ import           Test.Hspec
 
 logger :: Logger
 logger = Task.defaultLogger
+
+mockLogger :: Concurrent.MVar (Logger.Level, Text) -> Logger
+mockLogger loggerMVar =
+  Logger.fromIO $ curry $ Concurrent.putMVar loggerMVar
 
 data Config
   = Config0
@@ -39,13 +44,19 @@ returnIO = return
 runTaskIO :: TaskIO a -> IO (Either Error a)
 runTaskIO = Task.runTaskT logger Config0
 
+runTaskIOWithMockLogger :: TaskIO a -> IO (Concurrent.MVar (Logger.Level, Text), Either Error a)
+runTaskIOWithMockLogger task = do
+  loggerMVar <- Concurrent.newEmptyMVar
+  result <- Task.runTaskT (mockLogger loggerMVar) Config0 task
+  return (loggerMVar, result)
+
 spec :: Spec
 spec = do
   describe "Instances" $ do
     describe "Functor" $ do
       describe "fmap" $ do
         it "correctly modifies a value" $ do
-          let task = fmap (+ 1) $ returnIdentity 0
+          let task = (+ 1) <$> returnIdentity 0
           runTaskIdentity task `shouldBe` Right 1
       describe "Laws" $ do
         it "satisfies the Identity Law" $ do
@@ -110,7 +121,7 @@ spec = do
         it "<*> and >>= are compatible" $ do
           let m1 = return (+ 1)
           let m2 = return 0
-          runTaskIdentity (m1 <*> m2) `shouldBe` runTaskIdentity (m1 >>= (\x1 -> m2 >>= (\x2 -> return (x1 x2))))
+          runTaskIdentity (m1 <*> m2) `shouldBe` runTaskIdentity (m1 >>= (\x1 -> m2 >>= (return . x1)))
     describe "MonadError" $ do
       describe "throwError" $ do
         it "correctly throws an error" $ do
@@ -121,11 +132,11 @@ spec = do
     describe "MonadIO" $ do
       describe "liftIO" $ do
         it "correctly lifts an IO action" $ do
-          runTaskIO (return 0 >> Task.liftIO (return 1)) `shouldReturn` Right 1
+          runTaskIO (Task.liftIO (return 1)) `shouldReturn` Right 1
     describe "MonadTrans" $ do
       describe "lift" $ do
         it "correctly lifts an underlying action" $ do
-          runTaskIO (return 0 >> Task.lift (return 1)) `shouldReturn` Right 1
+          runTaskIO (Task.lift (return 1)) `shouldReturn` Right 1
     describe "MonadReader" $ do
       describe "ask" $ do
         it "correctly gets the config" $ do
@@ -138,30 +149,31 @@ spec = do
           runTaskIdentity (Task.local Config1 Task.ask) `shouldBe` Right (Config1 Config0)
   describe "Execution" $ do
     describe "runTaskT" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      context "when no errors were thrown" $ do
+        it "returns the correct value" $ do
+          runTaskIdentity (return 0) `shouldBe` Right 0
+      context "when an error was thrown" $ do
+        it "returns the correct value" $ do
+          runTaskIdentity (Task.throwError Error0 :: TaskIdentity ()) `shouldBe` Left Error0
+        it "does not execute subsequent actions" $ do
+          runTaskIO (Task.throwError Error0 >> Task.liftIO (fail "This exception should not be thrown." :: IO ())) `shouldReturn` Left Error0
   describe "Logging" $ do
-    describe "defaultLogger" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
     describe "info" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "calls the correct underlying logger function" $ do
+        (loggerMVar, _) <- runTaskIOWithMockLogger (Task.info "message")
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Info, "message")
     describe "warn" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "calls the correct underlying logger function" $ do
+        (loggerMVar, _) <- runTaskIOWithMockLogger (Task.warn "message")
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Warn, "message")
     describe "error'" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "calls the correct underlying logger function" $ do
+        (loggerMVar, _) <- runTaskIOWithMockLogger (Task.error' "message")
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Error, "message")
     describe "debug'" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "calls the correct underlying logger function" $ do
+        (loggerMVar, _) <- runTaskIOWithMockLogger (Task.debug "message")
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Debug, "message")
     describe "getLogger" $ do
       context "when" $ do
         it "it" $ do
