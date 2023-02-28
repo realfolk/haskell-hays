@@ -175,10 +175,15 @@ spec = do
         (loggerMVar, _) <- runTaskIOWithMockLogger (Task.debug "message")
         Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Debug, "message")
     describe "getLogger" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "returns the correct logger" $ do
+        loggerMVar <- Concurrent.newEmptyMVar
+        Task.runTaskT (mockLogger loggerMVar) Config0 $ do
+          logger <- Task.getLogger
+          Task.liftIO $ Logger.info logger "message"
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Info, "message")
     describe "localLogger" $ do
-      context "when" $ do
-        it "it" $ do
-          True `shouldBe` True
+      it "correctly maps the logger for the child Task" $ do
+        (loggerMVar, _) <- runTaskIOWithMockLogger $
+          Task.localLogger (Logger.prefix (const "prefix ")) $
+            Task.info "message"
+        Concurrent.readMVar loggerMVar `shouldReturn` (Logger.Info, "prefix message")
