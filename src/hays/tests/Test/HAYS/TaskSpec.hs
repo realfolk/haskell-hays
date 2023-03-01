@@ -52,7 +52,7 @@ runTaskIOWithMockLogger task = do
 
 spec :: Spec
 spec = do
-  describe "Instances" $ do
+  describe "TaskT" $ do
     describe "Functor" $ do
       describe "fmap" $ do
         it "correctly modifies a value" $ do
@@ -147,6 +147,7 @@ spec = do
       describe "local" $ do
         it "correctly modifies the config for an underlying action" $ do
           runTaskIdentity (Task.local Config1 Task.ask) `shouldBe` Right (Config1 Config0)
+
   describe "Execution" $ do
     describe "runTaskT" $ do
       context "when no errors were thrown" $ do
