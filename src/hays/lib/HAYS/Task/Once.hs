@@ -35,9 +35,9 @@ data Process a
       }
 
 wait :: MonadIO m => Process a -> m a
-wait process = Monad.IO.liftIO $ do
-  let lock = _resultLock process
-  Concurrent.readMVar lock
+wait (Process {..}) =
+  Monad.IO.liftIO $
+    Concurrent.readMVar _resultLock
 
 kill :: MonadIO m => Process error' -> m ()
 kill = Monad.IO.liftIO . Concurrent.killThread . _threadId

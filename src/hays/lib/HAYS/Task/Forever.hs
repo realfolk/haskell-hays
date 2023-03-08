@@ -50,10 +50,10 @@ data Process error'
       }
 
 wait :: MonadIO m => Process error' -> m ()
-wait process = Monad.IO.liftIO $ do
-  let lock = _terminationLock process
-  Lock.acquire lock
-  Lock.release lock
+wait (Process {..}) =
+  Monad.IO.liftIO $
+    Lock.acquire _terminationLock >>
+      Lock.release _terminationLock
 
 kill :: MonadIO m => Process error' -> m ()
 kill = Monad.IO.liftIO . Concurrent.killThread . _threadId
@@ -65,9 +65,9 @@ getNextError = Chan.readChan . _errorChan
 
 data Config taskConfig error' m a
   = Config
-      { _logger            :: Logger
-      , _toIO              :: ToIO taskConfig m (Either error' a)
-      , _onIterationResult :: Either error' a -> IterationOutcome taskConfig
+      { _logger :: Logger
+      , _toIO :: ToIO taskConfig m (Either error' a)
+      , _onIterationResult :: taskConfig -> Either error' a -> IterationOutcome taskConfig
       , _exceptionHandlers :: [Exception.Handler error']
       }
 
@@ -76,7 +76,7 @@ data Config taskConfig error' m a
 newConfig
   :: Logger
   -> ToIO taskConfig m (Either error' a)
-  -> (Either error' a -> IterationOutcome taskConfig)
+  -> (taskConfig -> Either error' a -> IterationOutcome taskConfig)
   -> [Exception.Handler error']
   -> Config taskConfig error' m a
 newConfig = Config
@@ -89,7 +89,7 @@ defaultConfig toIO onSomeException =
   newConfig
     Task.defaultLogger
     toIO
-    (either (const terminate) (const loop))
+    (const (either (const terminate) (const loop)))
     [ Exception.Handler (return . onSomeException)
     ]
 
@@ -101,7 +101,7 @@ setLogger logger config = config { _logger = logger }
 setToIO :: ToIO taskConfig m (Either error' a) -> Config taskConfig error' m a -> Config taskConfig error' m a
 setToIO toIO config = config { _toIO = toIO }
 
-setOnIterationResult :: (Either error' a -> IterationOutcome taskConfig) -> Config taskConfig error' m a -> Config taskConfig error' m a
+setOnIterationResult :: (taskConfig -> Either error' a -> IterationOutcome taskConfig) -> Config taskConfig error' m a -> Config taskConfig error' m a
 setOnIterationResult onIterationResult config = config { _onIterationResult = onIterationResult }
 
 setExceptionHandlers :: [Exception.Handler error'] -> Config taskConfig error' m a -> Config taskConfig error' m a
@@ -122,11 +122,11 @@ loop = Loop 0 id
 delayedLoop :: Time.Milliseconds -> IterationOutcome taskConfig
 delayedLoop = flip Loop id
 
-updateTaskConfigAndLoop :: (taskConfig -> taskConfig) -> IterationOutcome taskConfig
-updateTaskConfigAndLoop updateTaskConfig = Loop 0 updateTaskConfig
+updateTaskConfigAndLoop :: taskConfig -> IterationOutcome taskConfig
+updateTaskConfigAndLoop = Loop 0 . const
 
-updateTaskConfigAndDelayedLoop :: Time.Milliseconds -> (taskConfig -> taskConfig) -> IterationOutcome taskConfig
-updateTaskConfigAndDelayedLoop = Loop
+updateTaskConfigAndDelayedLoop :: Time.Milliseconds -> taskConfig -> IterationOutcome taskConfig
+updateTaskConfigAndDelayedLoop interval taskConfig = Loop interval (const taskConfig)
 
 -- * Execution
 
@@ -177,7 +177,7 @@ fork (Config {..}) initialTaskConfig task =
       -- Broadcast any errors on the errorChan.
       either (Chan.writeChan errorChan) (const (return ())) result
       -- Handle the IterationOutcome.
-      let iterationOutcome = _onIterationResult result
+      let iterationOutcome = _onIterationResult taskConfig result
       case iterationOutcome of
         Terminate ->
           return ()
