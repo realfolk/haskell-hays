@@ -7,7 +7,6 @@ module Test.HAYS.Task.OnceSpec
 import qualified Control.Concurrent as Concurrent
 import           Control.Exception  (Exception)
 import qualified Control.Exception  as Exception
-import           Data.Text          (Text)
 import qualified HAYS.Logger        as Logger
 import           HAYS.Task          (TaskT)
 import qualified HAYS.Task          as Task
@@ -65,6 +64,12 @@ spec = do
           Task.Once.wait process
           after <- Time.now
           after - before `shouldSatisfy` (>= Time.fromMilliseconds delayMs)
+        it "allows reading the forked Task's result multiple times" $ do
+          process <- forkTaskIO $ return 0
+          result0 <- Task.Once.wait process
+          result1 <- Task.Once.wait process
+          result2 <- Task.Once.wait process
+          (result0, result1, result2) `shouldBe` (Right 0, Right 0, Right 0)
     describe "kill" $ do
       context "when forking a Task" $ do
         it "stops the forked Task immediately" $ do
