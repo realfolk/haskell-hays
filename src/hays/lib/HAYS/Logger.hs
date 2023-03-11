@@ -6,6 +6,7 @@
 module HAYS.Logger
     ( Color (..)
     , ColorIntensity (..)
+    , GHC.Exts.fromList
     , Level (..)
     , Logger
     , Record
@@ -22,7 +23,6 @@ module HAYS.Logger
     , fromIO
     , fromIntegral
     , fromLevel
-    , fromList
     , fromMicroseconds
     , fromMilliseconds
     , fromMinutes
@@ -41,13 +41,13 @@ module HAYS.Logger
     , namespace
     , plain
     , prefix
-    , recordToText
     , removeFormatting
     , setBackground
     , setDefaultLevelFormatting
     , setForeground
     , setStyle
     , suffix
+    , toText
     , warn
     ) where
 
@@ -80,7 +80,7 @@ newtype Logger
 
 fromIO :: (Level -> Text -> IO ()) -> Logger
 fromIO action =
-  Logger $ \level -> action level . recordToText
+  Logger $ \level -> action level . toText
 
 fromHandle :: (Level -> IO.Handle) -> Logger
 fromHandle getHandle =
@@ -116,7 +116,7 @@ prefix getPrefixRecord (Logger f) =
 
 namespace :: Record -> Record -> Record -> (Level -> [Record]) -> Logger -> Logger
 namespace left right separator getNamespaceRecords =
-  prefix (\level -> left <> fromList (List.intersperse separator (getNamespaceRecords level)) <> right)
+  prefix (\level -> left <> GHC.Exts.fromList (List.intersperse separator (getNamespaceRecords level)) <> right)
 
 defaultNamespace :: [Record] -> Logger -> Logger
 defaultNamespace records =
@@ -157,19 +157,8 @@ data Record
       }
   | Multiple !(NonEmpty Record)
 
--- | The 'IsString' instance of 'Record' constructs a 'plain' 'Record'
--- with no formatting.
-instance GHC.Exts.IsString Record where
-  fromString = plain . GHC.Exts.fromString
-
-instance GHC.Exts.IsList Record where
-  type Item Record = Record
-  fromList = HAYS.Logger.fromList
-  toList record =
-    case record of
-      Multiple records -> NonEmpty.toList records
-      _                -> [record]
-
+instance Show Record where
+  show = Text.unpack . toText
 
 instance Semigroup Record where
   (<>) a b =
@@ -180,6 +169,22 @@ instance Semigroup Record where
       (_, Multiple bs)           -> Multiple $ NonEmpty.cons a bs
       _                          -> Multiple [a, b]
 
+-- | The 'IsString' instance of 'Record' constructs a 'plain' 'Record'
+-- with no formatting.
+instance GHC.Exts.IsString Record where
+  fromString = plain . GHC.Exts.fromString
+
+instance GHC.Exts.IsList Record where
+  type Item Record = Record
+  fromList records =
+    case records of
+      []     -> plain ""
+      (s:ss) -> Multiple $ s :| ss
+  toList record =
+    case record of
+      Multiple records -> NonEmpty.toList records
+      _                -> [record]
+
 -- ** Constructors
 
 plain :: Text -> Record
@@ -187,12 +192,6 @@ plain = Plain
 
 formatted :: Color -> Color -> Style -> Text -> Record
 formatted = Formatted
-
-fromList :: [Record] -> Record
-fromList records =
-  case records of
-    []     -> plain ""
-    (s:ss) -> Multiple $ s :| ss
 
 fromLevel :: Bool -> Level -> Record
 fromLevel fixedWidth level =
@@ -261,8 +260,8 @@ fromPicoseconds = (<> "ps") . fromIntegral
 
 -- ** Converters
 
-recordToText :: Record -> Text
-recordToText record =
+toText :: Record -> Text
+toText record =
   case record of
     Plain text -> text
     Formatted {..} ->
@@ -274,10 +273,10 @@ recordToText record =
         , resetSequence
         ]
     Multiple records ->
-      foldr ((<>) . recordToText) "" records
+      foldr ((<>) . toText) "" records
 
 
--- ** Setters
+-- ** Modifiers
 
 setForeground :: Color -> Record -> Record
 setForeground color record =

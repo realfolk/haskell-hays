@@ -13,9 +13,9 @@ import           Data.ByteString           (ByteString)
 import qualified Data.ByteString.Char8     as ByteString.Char8
 import qualified Data.ByteString.Lazy      as ByteString.Lazy
 import qualified Data.List                 as List
-import           HAYS.Server.Internal.HTTP        (Body, Header, Status)
-import           HAYS.Server.Response             (Response)
-import qualified HAYS.Server.Response             as Response
+import           HAYS.Server.Internal.HTTP (Body, Header, Status)
+import           HAYS.Server.Response      (Response)
+import qualified HAYS.Server.Response      as Response
 import qualified Lib.Base64                as Base64
 import qualified Lib.Crypto.Hash           as Hash
 import qualified Lib.Crypto.Hash.SHA1      as SHA1
@@ -76,7 +76,7 @@ newCacheKey :: Body -> CacheKey
 newCacheKey = CacheKey . Base64.encodeStrict . Hash.encodeStrict . SHA1.hash
 
 hasHitCache :: CacheKey -> [Header] -> Bool
-hasHitCache cacheKey requestHeaders = List.elem (ifNoneMatchHeader cacheKey) requestHeaders
+hasHitCache cacheKey = List.elem (ifNoneMatchHeader cacheKey)
 
 -- *** Headers
 
