@@ -6,7 +6,7 @@ module HAYS.Server
     ( Error (..)
     , Port
     , Server
-    , defaultLogger
+    , ServerLogger
     , defaultServer
     , listen
     , setLogger
@@ -52,7 +52,7 @@ data Server msg
       , _warpSettings    :: Warp.Settings
       , _warpTLSSettings :: Maybe WarpTLS.TLSSettings
       , _waiMiddleware   :: Wai.Middleware
-      , _logger          :: UUID -> Logger
+      , _logger          :: ServerLogger
       , _router          :: Router msg
       , _onMsg           :: msg -> IO Response
       , _onErrorResponse :: Error -> Response
@@ -61,14 +61,14 @@ data Server msg
 
 -- ** Constructors
 
-defaultServer :: Server msg
-defaultServer =
+defaultServer :: ServerLogger -> Server msg
+defaultServer logger =
   Server
     3000
     Warp.defaultSettings
     Nothing
     id
-    defaultLogger
+    logger
     Router.next
     (const (pure defaultResponse))
     (const defaultResponse)
@@ -115,7 +115,7 @@ listen (Server {..}) =
         & Warp.setOnException (\_ e -> _onErrorIO (WarpException e))
         & Warp.setOnExceptionResponse (Response.toWaiResponse . _onErrorResponse . WarpException)
     startServer =
-      (maybe Warp.runSettings WarpTLS.runTLS _warpTLSSettings) warpSettings . _waiMiddleware
+      maybe Warp.runSettings WarpTLS.runTLS _warpTLSSettings warpSettings . _waiMiddleware
 
 -- ** Setters
 
@@ -131,7 +131,7 @@ setWarpTLSSettings warpTLSSettings server = server { _warpTLSSettings = warpTLSS
 setWaiMiddleware :: Wai.Middleware -> Server msg -> Server msg
 setWaiMiddleware waiMiddleware server = server { _waiMiddleware = waiMiddleware }
 
-setLogger :: (UUID -> Logger) -> Server msg -> Server msg
+setLogger :: ServerLogger -> Server msg -> Server msg
 setLogger logger server = server { _logger = logger }
 
 setRouter :: Router msg -> Server msg -> Server msg
@@ -156,11 +156,9 @@ data Error
 
 type Port = Word16
 
--- * Logging
+-- * ServerLogger
 
-defaultLogger :: UUID -> Logger
-defaultLogger requestID =
-  Logger.defaultNamespace [Logger.fromUUID requestID] Logger.defaultTerminal
+type ServerLogger = UUID -> Logger
 
 -- ** Internal
 

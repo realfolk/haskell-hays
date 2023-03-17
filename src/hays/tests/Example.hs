@@ -27,8 +27,7 @@ main = do
   Task.Forever.run config print () server
     where
       config =
-        Task.Forever.defaultConfig (\_ io -> io) (const ())
-          & Task.Forever.setLogger (taskLogger serverTaskName Nothing)
+        Task.Forever.defaultConfig (taskLogger serverTaskName Nothing) (\_ io -> io) (const ())
 
 -- * Test Exceptions
 
@@ -48,8 +47,7 @@ server = do
   Task.warn "starting server"
   Task.error' "starting server"
   Task.debug "starting server"
-  Server.defaultServer
-    & Server.setLogger (taskLogger serverTaskName. Just)
+  Server.defaultServer (taskLogger serverTaskName . Just)
     & Server.setRouter router
     & Server.setOnMsg onMsg
     & Server.listen
@@ -119,4 +117,4 @@ taskLogger name maybeRequestID =
         case maybeRequestID of
           Nothing        -> [Logger.plain name]
           Just requestID -> [Logger.plain name, Logger.fromUUID requestID]
-   in Logger.defaultNamespace records Logger.defaultTerminal
+   in Logger.defaultNamespace records $ Logger.defaultTerminal Logger.toANSIFormattedText

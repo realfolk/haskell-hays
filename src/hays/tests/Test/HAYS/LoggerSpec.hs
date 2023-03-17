@@ -5,6 +5,7 @@ module Test.HAYS.LoggerSpec
     ) where
 
 import qualified Control.Concurrent as Concurrent
+import qualified Data.Bifunctor     as Bifunctor
 import           Data.Text          (Text)
 import qualified Data.Text          as Text
 import           HAYS.Logger        (Logger)
@@ -16,7 +17,7 @@ testLogger = do
   chan <- Concurrent.newChan
   return
     ( chan
-    , Logger.fromIO $ curry $ Concurrent.writeChan chan
+    , Logger.fromIO $ curry $ Concurrent.writeChan chan . Bifunctor.second Logger.toANSIFormattedText
     )
 
 plainRecord0 = Logger.plain "0"
@@ -243,7 +244,11 @@ spec = do
           it "it" $ do
             True `shouldBe` True
     describe "Converters" $ do
-      describe "toText" $ do
+      describe "toPlainText" $ do
+        context "when" $ do
+          it "it" $ do
+            True `shouldBe` True
+      describe "toANSIFormattedText" $ do
         context "when" $ do
           it "it" $ do
             True `shouldBe` True

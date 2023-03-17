@@ -7,6 +7,7 @@ module Test.HAYS.Task.ForeverSpec
 import qualified Control.Concurrent as Concurrent
 import           Control.Exception  (Exception)
 import qualified Control.Exception  as Exception
+import qualified Data.Bifunctor     as Bifunctor
 import qualified HAYS.Logger        as Logger
 import           HAYS.Task          (TaskT)
 import qualified HAYS.Task          as Task
@@ -33,7 +34,7 @@ type TaskIO a = TaskT TaskConfig Error IO a
 foreverConfig :: Task.Forever.Config TaskConfig Error IO a
 foreverConfig =
   Task.Forever.newConfig
-    Task.defaultLogger
+    Logger.silent
     (const id)
     defaultOnIterationResult
     [ Exception.Handler (return . Exception0)
@@ -98,7 +99,7 @@ spec = do
     describe "setLogger" $ do
       it "correctly sets the logger" $ do
         mVar <- Concurrent.newEmptyMVar
-        let logger = Logger.fromIO (curry (Concurrent.putMVar mVar))
+        let logger = Logger.fromIO (curry (Concurrent.putMVar mVar . Bifunctor.second Logger.toPlainText))
         let config = Task.Forever.setLogger logger foreverConfig
         Task.Forever.fork config TaskConfig0 $ Task.info "message" >> terminate
         Concurrent.readMVar mVar `shouldReturn` (Logger.Info, "message")

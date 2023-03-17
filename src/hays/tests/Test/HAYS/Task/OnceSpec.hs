@@ -7,6 +7,7 @@ module Test.HAYS.Task.OnceSpec
 import qualified Control.Concurrent as Concurrent
 import           Control.Exception  (Exception)
 import qualified Control.Exception  as Exception
+import qualified Data.Bifunctor     as Bifunctor
 import qualified HAYS.Logger        as Logger
 import           HAYS.Task          (TaskT)
 import qualified HAYS.Task          as Task
@@ -32,7 +33,7 @@ type TaskIO a = TaskT TaskConfig Error IO a
 onceConfig :: Task.Once.Config TaskConfig Error IO a
 onceConfig =
   Task.Once.newConfig
-    Task.defaultLogger
+    Logger.silent
     (const id)
     [Exception.Handler (return . Exception0)]
 
@@ -82,7 +83,7 @@ spec = do
     describe "setLogger" $ do
       it "correctly sets the logger" $ do
         mVar <- Concurrent.newEmptyMVar
-        let logger = Logger.fromIO (curry (Concurrent.putMVar mVar))
+        let logger = Logger.fromIO (curry (Concurrent.putMVar mVar . Bifunctor.second Logger.toPlainText))
         let config = Task.Once.setLogger logger onceConfig
         Task.Once.run config TaskConfig $ Task.info "message"
         Concurrent.readMVar mVar `shouldReturn` (Logger.Info, "message")

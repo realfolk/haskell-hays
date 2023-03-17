@@ -82,12 +82,13 @@ newConfig
 newConfig = Config
 
 defaultConfig
-  :: ToIO taskConfig m (Either error' a)
+  :: Logger
+  -> ToIO taskConfig m (Either error' a)
   -> (SomeException -> error')
   -> Config taskConfig error' m a
-defaultConfig toIO onSomeException =
+defaultConfig logger toIO onSomeException =
   newConfig
-    Task.defaultLogger
+    logger
     toIO
     (const (either (const terminate) (const loop)))
     [ Exception.Handler (return . onSomeException)

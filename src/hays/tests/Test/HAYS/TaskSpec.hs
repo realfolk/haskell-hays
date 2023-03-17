@@ -13,13 +13,14 @@ import qualified HAYS.Logger            as Logger
 import           HAYS.Task              (TaskT)
 import qualified HAYS.Task              as Task
 import           Test.Hspec
+import qualified Data.Bifunctor as Bifunctor
 
 logger :: Logger
-logger = Task.defaultLogger
+logger = Logger.silent
 
 mockLogger :: Concurrent.MVar (Logger.Level, Text) -> Logger
 mockLogger loggerMVar =
-  Logger.fromIO $ curry $ Concurrent.putMVar loggerMVar
+  Logger.fromIO $ curry $ Concurrent.putMVar loggerMVar . Bifunctor.second Logger.toPlainText
 
 data Config
   = Config0

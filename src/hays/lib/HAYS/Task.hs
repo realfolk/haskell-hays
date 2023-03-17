@@ -9,7 +9,6 @@ module HAYS.Task
     , TaskT
     , Trans.lift
     , debug
-    , defaultLogger
     , error'
     , getLogger
     , info
@@ -56,10 +55,6 @@ runTaskT logger config (TaskT m) = do
   Except.runExceptT (Reader.runReaderT m environment)
 
 -- ** Logger
-
-defaultLogger :: Logger
-defaultLogger =
-  Logger.defaultNamespace [] Logger.defaultTerminal
 
 info :: (MonadIO m) => Logger.Record -> TaskT config error' m ()
 info = log' Logger.info

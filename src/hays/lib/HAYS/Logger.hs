@@ -46,8 +46,10 @@ module HAYS.Logger
     , setDefaultLevelFormatting
     , setForeground
     , setStyle
+    , silent
     , suffix
-    , toText
+    , toANSIFormattedText
+    , toPlainText
     , warn
     ) where
 
@@ -78,17 +80,20 @@ newtype Logger
 
 -- ** Constructors
 
-fromIO :: (Level -> Text -> IO ()) -> Logger
-fromIO action =
-  Logger $ \level -> action level . toText
+fromIO :: (Level -> Record -> IO ()) -> Logger
+fromIO = Logger
 
-fromHandle :: (Level -> IO.Handle) -> Logger
-fromHandle getHandle =
-  fromIO (Text.IO.hPutStrLn . getHandle)
+fromHandle :: (Record -> Text) -> (Level -> IO.Handle) -> Logger
+fromHandle toText getHandle =
+  fromIO $ \level record ->
+    Text.IO.hPutStrLn (getHandle level) (toText record)
 
-defaultTerminal :: Logger
-defaultTerminal =
-  fromHandle $ \level ->
+silent :: Logger
+silent = fromIO $ \_ _ -> return ()
+
+defaultTerminal :: (Record -> Text) -> Logger
+defaultTerminal toText =
+  fromHandle toText $ \level ->
     case level of
       Error -> IO.stderr
       _     -> IO.stdout
@@ -158,7 +163,7 @@ data Record
   | Multiple !(NonEmpty Record)
 
 instance Show Record where
-  show = Text.unpack . toText
+  show = Text.unpack . toPlainText
 
 instance Semigroup Record where
   (<>) a b =
@@ -260,8 +265,16 @@ fromPicoseconds = (<> "ps") . fromIntegral
 
 -- ** Converters
 
-toText :: Record -> Text
-toText record =
+toPlainText :: Record -> Text
+toPlainText record =
+  case record of
+    Plain text -> text
+    Formatted {..} -> _text
+    Multiple records ->
+      foldr ((<>) . toPlainText) "" records
+
+toANSIFormattedText :: Record -> Text
+toANSIFormattedText record =
   case record of
     Plain text -> text
     Formatted {..} ->
@@ -273,7 +286,7 @@ toText record =
         , resetSequence
         ]
     Multiple records ->
-      foldr ((<>) . toText) "" records
+      foldr ((<>) . toANSIFormattedText) "" records
 
 
 -- ** Modifiers
