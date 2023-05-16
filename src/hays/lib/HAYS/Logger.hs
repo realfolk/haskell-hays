@@ -16,9 +16,9 @@ module HAYS.Logger
     , defaultTerminal
     , error'
     , formatted
+    , fromByteStringHandle
     , fromDate
     , fromDays
-    , fromHandle
     , fromHours
     , fromIO
     , fromIntegral
@@ -31,6 +31,7 @@ module HAYS.Logger
     , fromPicoseconds
     , fromSeconds
     , fromShow
+    , fromTextHandle
     , fromTimeAndZone
     , fromTimeUTC
     , fromUUID
@@ -53,6 +54,8 @@ module HAYS.Logger
     , warn
     ) where
 
+import           Data.ByteString         (ByteString)
+import qualified Data.ByteString         as ByteString
 import qualified Data.List               as List
 import           Data.List.NonEmpty      (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty      as NonEmpty
@@ -83,17 +86,24 @@ newtype Logger
 fromIO :: (Level -> Record -> IO ()) -> Logger
 fromIO = Logger
 
-fromHandle :: (Record -> Text) -> (Level -> IO.Handle) -> Logger
-fromHandle toText getHandle =
+-- Adds a new line after each logged record.
+fromTextHandle :: (Record -> Text) -> (Level -> IO.Handle) -> Logger
+fromTextHandle toText getHandle =
   fromIO $ \level record ->
     Text.IO.hPutStrLn (getHandle level) (toText record)
+
+-- Does not delimit logged records, simply appends to the handle.
+fromByteStringHandle :: (Record -> ByteString) -> (Level -> IO.Handle) -> Logger
+fromByteStringHandle toByteString getHandle =
+  fromIO $ \level record ->
+    ByteString.hPut (getHandle level) (toByteString record)
 
 silent :: Logger
 silent = fromIO $ \_ _ -> return ()
 
 defaultTerminal :: (Record -> Text) -> Logger
 defaultTerminal toText =
-  fromHandle toText $ \level ->
+  fromTextHandle toText $ \level ->
     case level of
       Error -> IO.stderr
       _     -> IO.stdout
@@ -161,6 +171,7 @@ data Record
       , _text       :: !Text
       }
   | Multiple !(NonEmpty Record)
+  deriving (Eq)
 
 instance Show Record where
   show = Text.unpack . toPlainText
@@ -279,9 +290,9 @@ toANSIFormattedText record =
     Plain text -> text
     Formatted {..} ->
       mconcat
-        [ colorToSequence Foreground _foreground
-        , colorToSequence Background _background
-        , styleToSequence _style
+        [ colorToANSISequence Foreground _foreground
+        , colorToANSISequence Background _background
+        , styleToANSISequence _style
         , _text
         , resetSequence
         ]
@@ -351,11 +362,12 @@ data Color
   | Magenta ColorIntensity
   | Cyan ColorIntensity
   | White ColorIntensity
+  deriving (Eq, Show)
 
 -- ** Converters
 
-colorToSequence :: ColorTarget -> Color -> Text
-colorToSequence target color =
+colorToANSISequence :: ColorTarget -> Color -> Text
+colorToANSISequence target color =
   let
     codePrefix intensity=
       case (intensity, target) of
@@ -380,20 +392,23 @@ colorToSequence target color =
 
 -- ** Intensity
 
-data ColorIntensity = Normal | Bright
+data ColorIntensity = Normal | Bright deriving (Eq, Show)
 
 -- ** ColorTarget
 
-data ColorTarget = Foreground | Background
+data ColorTarget = Foreground | Background deriving (Eq, Show)
 
 -- * Style
 
-data Style = Regular | Bold | Dim | Italic | Underline | Blink
+data Style = Regular | Bold | Dim | Italic | Underline | Blink deriving
+    ( Eq
+    , Show
+    )
 
 -- ** Converters
 
-styleToSequence :: Style -> Text
-styleToSequence style =
+styleToANSISequence :: Style -> Text
+styleToANSISequence style =
   case style of
     Regular   -> ""
     Bold      -> makeSequence "1"
