@@ -12,7 +12,7 @@ import qualified HAYS.Logger        as Logger
 import           HAYS.Task          (TaskT)
 import qualified HAYS.Task          as Task
 import qualified HAYS.Task.Once     as Task.Once
-import qualified Lib.Time           as Time
+import qualified Pouch.Time           as Time
 import           Test.Hspec
 
 data TaskConfig = TaskConfig deriving (Eq, Show)

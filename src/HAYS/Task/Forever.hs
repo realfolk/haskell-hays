@@ -36,9 +36,9 @@ import           HAYS.Task               (TaskT)
 import qualified HAYS.Task               as Task
 import qualified HAYS.Task.Once          as Task.Once
 import           HAYS.Task.Types         (ToIO)
-import           Lib.Concurrent.Lock     (Lock)
-import qualified Lib.Concurrent.Lock     as Lock
-import qualified Lib.Time                as Time
+import           Pouch.Concurrent.Lock     (Lock)
+import qualified Pouch.Concurrent.Lock     as Lock
+import qualified Pouch.Time                as Time
 
 -- * Process
 

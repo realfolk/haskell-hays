@@ -39,7 +39,7 @@ import           HAYS.Server.Internal.HTTP    (Body, Header, HeaderName,
                                                jsonMimeType)
 import           HAYS.Server.Request          (Request)
 import qualified HAYS.Server.Request          as Request
-import qualified Lib.URL.Component.Query.Item as Query.Item
+import qualified Pouch.URL.Component.Query.Item as Query.Item
 import qualified Network.HTTP.Types           as HTTP
 
 -- * Router

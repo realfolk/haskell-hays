@@ -33,12 +33,12 @@ import           HAYS.Server.Response        (Response)
 import qualified HAYS.Server.Response        as Response
 import           HAYS.Server.Router          (Router)
 import qualified HAYS.Server.Router          as Router
-import           Lib.Time                    (Time)
-import qualified Lib.Time                    as Time
-import qualified Lib.URL.Component.Path      as Path
-import qualified Lib.URL.Component.Query     as Query
-import           Lib.UUID                    (UUID)
-import qualified Lib.UUID                    as UUID
+import           Pouch.Time                    (Time)
+import qualified Pouch.Time                    as Time
+import qualified Pouch.URL.Component.Path      as Path
+import qualified Pouch.URL.Component.Query     as Query
+import           Pouch.UUID                    (UUID)
+import qualified Pouch.UUID                    as UUID
 import qualified Network.HTTP.Types          as HTTP
 import qualified Network.Wai                 as Wai
 import qualified Network.Wai.Handler.Warp    as Warp

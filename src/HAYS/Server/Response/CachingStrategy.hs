@@ -16,10 +16,10 @@ import qualified Data.List                 as List
 import           HAYS.Server.Internal.HTTP (Body, Header, Status)
 import           HAYS.Server.Response      (Response)
 import qualified HAYS.Server.Response      as Response
-import qualified Lib.Base64                as Base64
-import qualified Lib.Crypto.Hash           as Hash
-import qualified Lib.Crypto.Hash.SHA1      as SHA1
-import qualified Lib.Time                  as Time
+import qualified Pouch.Base64                as Base64
+import qualified Pouch.Crypto.Hash           as Hash
+import qualified Pouch.Crypto.Hash.SHA1      as SHA1
+import qualified Pouch.Time                  as Time
 import qualified Network.HTTP.Types        as HTTP
 import qualified Network.HTTP.Types.Header as HTTP
 

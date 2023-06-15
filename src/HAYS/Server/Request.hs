@@ -20,11 +20,11 @@ import           Control.Monad.IO.Class       (MonadIO)
 import qualified Control.Monad.IO.Class       as Monad.IO
 import qualified Data.List                    as List
 import           HAYS.Server.Internal.HTTP    (Body, Header, HeaderName, Method)
-import           Lib.URL.Component.Path       (Path)
-import qualified Lib.URL.Component.Path       as Path
-import           Lib.URL.Component.Query      (Query)
-import qualified Lib.URL.Component.Query      as Query
-import qualified Lib.URL.Component.Query.Item as Query.Item
+import           Pouch.URL.Component.Path       (Path)
+import qualified Pouch.URL.Component.Path       as Path
+import           Pouch.URL.Component.Query      (Query)
+import qualified Pouch.URL.Component.Query      as Query
+import qualified Pouch.URL.Component.Query.Item as Query.Item
 import qualified Network.Wai                  as Wai
 
 -- * Request

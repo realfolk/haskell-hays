@@ -21,3 +21,4 @@ hie.yaml
 tmp/
 docs/
 result
+dist-newstyle/

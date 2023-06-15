@@ -63,16 +63,16 @@ import           Data.Text               (Text)
 import qualified Data.Text               as Text
 import qualified Data.Text.IO            as Text.IO
 import qualified GHC.Exts
-import           Lib.Time                (Time)
-import qualified Lib.Time                as Time
-import           Lib.Time.Date           (Date)
-import qualified Lib.Time.Date           as Date
-import qualified Lib.Time.Date.Formatter as Date.Formatter
-import qualified Lib.Time.Formatter      as Time.Formatter
-import qualified Lib.Time.Month          as Month
-import qualified Lib.Time.Weekday        as Weekday
-import           Lib.UUID                (UUID)
-import qualified Lib.UUID                as UUID
+import           Pouch.Time                (Time)
+import qualified Pouch.Time                as Time
+import           Pouch.Time.Date           (Date)
+import qualified Pouch.Time.Date           as Date
+import qualified Pouch.Time.Date.Formatter as Date.Formatter
+import qualified Pouch.Time.Formatter      as Time.Formatter
+import qualified Pouch.Time.Month          as Month
+import qualified Pouch.Time.Weekday        as Weekday
+import           Pouch.UUID                (UUID)
+import qualified Pouch.UUID                as UUID
 import           Prelude                 hiding (fromIntegral)
 import qualified System.IO               as IO
 
