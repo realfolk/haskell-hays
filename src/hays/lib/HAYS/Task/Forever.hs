@@ -58,6 +58,8 @@ wait (Process {..}) =
 kill :: MonadIO m => Process error' -> m ()
 kill = Monad.IO.liftIO . Concurrent.killThread . _threadId
 
+-- TODO how to handle when the process terminates?
+-- Currently, it would hang indefinitely.
 getNextError :: Process error' -> IO error'
 getNextError = Chan.readChan . _errorChan
 

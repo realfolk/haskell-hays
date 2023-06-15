@@ -166,6 +166,7 @@
         rnixLsp = rnixLsp.defaultPackage.${system};
         haskellLanguageServer = haskellPkgs.haskell-language-server;
         hspecDiscover = haskellPkgs.hspec-discover;
+        cabalInstall = haskellPkgs.cabal-install;
       };
 
       devShells.default = pkgs.mkShell {
