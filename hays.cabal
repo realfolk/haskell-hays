@@ -106,7 +106,11 @@ test-suite hays-test
     default-language: GHC2021
 
     -- Modules included in this executable, other than Main.
-    -- other-modules:
+    other-modules:
+        Test.HAYS.LoggerSpec
+        Test.HAYS.Task.ForeverSpec
+        Test.HAYS.Task.OnceSpec
+        Test.HAYS.TaskSpec
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
