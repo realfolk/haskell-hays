@@ -1,7 +1,9 @@
 source-repository-package
     type:       git
     location:   https://github.com/realfolk/haskell-pouch.git
-    tag:        20f91880aa68278770316c9be32b8eda34507db2
+    tag:        153d033eccf5e13a76d17529aa996121834644f9
 
 packages:
     ./hays.cabal
+
+import: https://www.stackage.org/lts-20.12/cabal.config
