@@ -22,48 +22,25 @@
     }:
     flakeUtils.lib.eachDefaultSystem (system:
     let
-      haskellDependencies = p: [
-        # This package
-        p.aeson
-        p.haddock
-        p.hspec
-        p.http-types
-        p.wai
-        p.warp
-        p.warp-tls
-        # Upstream Dependencies
-        p.microlens
-        p.base58-bytestring
-        p.base64-bytestring
-        p.uuid
-        p.blaze-builder
-        p.network-uri
-      ];
-
       pkgs = nixpkgs.legacyPackages.${system};
       haskellPkgs = haskellPackages.packages.${system};
-      ghc = haskellPkgs.ghcWithPackages haskellDependencies;
+      ghc = haskellPkgs.ghc;
     in
     {
-      packages = {
-        inherit ghc;
-        neovim = neovim.packages.${system}.default;
-        ranger = ranger.packages.${system}.default;
-        rnixLsp = rnixLsp.defaultPackage.${system};
-        haskellLanguageServer = haskellPkgs.haskell-language-server;
-        hspecDiscover = haskellPkgs.hspec-discover;
-        cabalInstall = haskellPkgs.cabal-install;
-      };
-
       devShells.default = pkgs.mkShell {
-        buildInputs = builtins.concatLists [
-          (builtins.attrValues self.packages.${system})
-          [
-            pkgs.silver-searcher # ag
-            pkgs.fzf
-            pkgs.openssl
-            pkgs.inotifyTools
-          ]
+        buildInputs = [
+          pkgs.silver-searcher # ag
+          pkgs.fzf
+          pkgs.openssl
+          pkgs.inotifyTools
+          pkgs.zlib
+          ghc
+          neovim.packages.${system}.default
+          ranger.packages.${system}.default
+          rnixLsp.defaultPackage.${system}
+          haskellPkgs.haskell-language-server
+          haskellPkgs.hspec-discover
+          haskellPkgs.cabal-install
         ];
         shellHook = pkgs.lib.concatStrings [
           (
