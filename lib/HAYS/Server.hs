@@ -21,7 +21,6 @@ module HAYS.Server
     ) where
 
 import           Control.Exception           (SomeException)
-import qualified Control.Exception           as Exception
 import           Data.Function               ((&))
 import qualified Data.Text.Encoding          as Text.Encoding
 import           Data.Word                   (Word16)
@@ -33,23 +32,22 @@ import           HAYS.Server.Response        (Response)
 import qualified HAYS.Server.Response        as Response
 import           HAYS.Server.Router          (Router)
 import qualified HAYS.Server.Router          as Router
-import           Pouch.Time                    (Time)
-import qualified Pouch.Time                    as Time
-import qualified Pouch.URL.Component.Path      as Path
-import qualified Pouch.URL.Component.Query     as Query
-import           Pouch.UUID                    (UUID)
-import qualified Pouch.UUID                    as UUID
 import qualified Network.HTTP.Types          as HTTP
 import qualified Network.Wai                 as Wai
 import qualified Network.Wai.Handler.Warp    as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
+import           Pouch.Time                  (Time)
+import qualified Pouch.Time                  as Time
+import qualified Pouch.URL.Component.Path    as Path
+import qualified Pouch.URL.Component.Query   as Query
+import           Pouch.UUID                  (UUID)
+import qualified Pouch.UUID                  as UUID
 
 -- * Server
 
 data Server msg
   = Server
-      { _port            :: Port
-      , _warpSettings    :: Warp.Settings
+      { _warpSettings    :: Warp.Settings
       , _warpTLSSettings :: Maybe WarpTLS.TLSSettings
       , _waiMiddleware   :: Wai.Middleware
       , _logger          :: ServerLogger
@@ -64,7 +62,6 @@ data Server msg
 defaultServer :: ServerLogger -> Server msg
 defaultServer logger =
   Server
-    3000
     Warp.defaultSettings
     Nothing
     id
@@ -120,7 +117,7 @@ listen (Server {..}) =
 -- ** Setters
 
 setPort :: Port -> Server msg -> Server msg
-setPort port server = server { _port = port }
+setPort port server = setWarpSettings (Warp.setPort (fromIntegral port) (_warpSettings server)) server
 
 setWarpSettings :: Warp.Settings -> Server msg -> Server msg
 setWarpSettings warpSettings server = server { _warpSettings = warpSettings }
@@ -197,10 +194,10 @@ logResponse logger response elapsedTime =
     ]
     where
       statusCode = HTTP.statusCode $ Response.getStatus response
-      statusColor statusCode
-        | statusCode >= 400 = Logger.Red Logger.Normal
-        | statusCode >= 300 = Logger.Yellow Logger.Normal
-        | statusCode >= 200 = Logger.Green Logger.Normal
+      statusColor statusCode'
+        | statusCode' >= 400 = Logger.Red Logger.Normal
+        | statusCode' >= 300 = Logger.Yellow Logger.Normal
+        | statusCode' >= 200 = Logger.Green Logger.Normal
         | otherwise = Logger.Default
 
 setGreyForeground :: Logger.Record -> Logger.Record
