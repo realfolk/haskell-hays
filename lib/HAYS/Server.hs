@@ -52,7 +52,7 @@ data Server msg
       , _waiMiddleware   :: Wai.Middleware
       , _logger          :: ServerLogger
       , _router          :: Router msg
-      , _onMsg           :: msg -> IO Response
+      , _onMsg           :: Logger -> msg -> IO Response
       , _onErrorResponse :: Error -> Response
       , _onErrorIO       :: Error -> IO ()
       }
@@ -67,7 +67,7 @@ defaultServer logger =
     id
     logger
     Router.next
-    (const (pure defaultResponse))
+    (\_ _ -> pure defaultResponse)
     (const defaultResponse)
     (const (return ()))
   where
@@ -93,7 +93,7 @@ listen (Server {..}) =
     logRequest logger request
     -- Compute response based on server configuration
     response <- case Router.route _router request of
-      Just msg -> _onMsg msg
+      Just msg -> _onMsg logger msg
       Nothing  -> do
         let error' = UnhandledRequest request
         _onErrorIO error'
@@ -134,7 +134,7 @@ setLogger logger server = server { _logger = logger }
 setRouter :: Router msg -> Server msg -> Server msg
 setRouter router server = server { _router = router }
 
-setOnMsg :: (msg -> IO Response) -> Server msg -> Server msg
+setOnMsg :: (Logger -> msg -> IO Response) -> Server msg -> Server msg
 setOnMsg onMsg server = server { _onMsg = onMsg }
 
 setOnErrorResponse :: (Error -> Response) -> Server msg -> Server msg
