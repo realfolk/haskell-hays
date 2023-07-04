@@ -21,6 +21,8 @@ module HAYS.Server
     ) where
 
 import           Control.Exception           (SomeException)
+import           Control.Monad.IO.Class      (MonadIO)
+import qualified Control.Monad.IO.Class      as MonadIO
 import           Data.Function               ((&))
 import qualified Data.Text.Encoding          as Text.Encoding
 import           Data.Word                   (Word16)
@@ -79,9 +81,9 @@ defaultServer logger =
 
 -- ** Execution
 
-listen :: Server msg -> IO ()
+listen :: MonadIO m => Server msg -> m ()
 listen (Server {..}) =
-  startServer $ \waiRequest sendWaiResponse -> do
+  MonadIO.liftIO $ startServer $ \waiRequest sendWaiResponse -> do
     -- Track request start time
     startTime <- Time.now
     -- Transform request

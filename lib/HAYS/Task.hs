@@ -24,7 +24,6 @@ import           Control.Monad.Reader   (MonadReader, ReaderT)
 import qualified Control.Monad.Reader   as Reader
 import           Control.Monad.Trans    (MonadTrans)
 import qualified Control.Monad.Trans    as Trans
-import           Data.Text              (Text)
 import           HAYS.Logger            (Logger)
 import qualified HAYS.Logger            as Logger
 
@@ -81,10 +80,10 @@ localLogger modifyLogger (TaskT m) = TaskT $ Reader.local modifyEnvironment m
 
 -- ** Internal
 
-log' :: (MonadIO m)  => (Logger -> Logger.Record -> IO ()) -> Logger.Record -> TaskT config error' m ()
+log' :: MonadIO m => (Logger -> Logger.Record -> TaskT config error' m ()) -> Logger.Record -> TaskT config error' m ()
 log' getLogFunction records = do
   logger <- getLogger
-  Reader.liftIO $ getLogFunction logger records
+  getLogFunction logger records
 
 -- * Environment
 

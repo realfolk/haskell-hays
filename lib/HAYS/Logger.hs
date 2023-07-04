@@ -54,14 +54,16 @@ module HAYS.Logger
     , warn
     ) where
 
-import           Data.ByteString         (ByteString)
-import qualified Data.ByteString         as ByteString
-import qualified Data.List               as List
-import           Data.List.NonEmpty      (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty      as NonEmpty
-import           Data.Text               (Text)
-import qualified Data.Text               as Text
-import qualified Data.Text.IO            as Text.IO
+import           Control.Monad.IO.Class    (MonadIO)
+import qualified Control.Monad.IO.Class    as MonadIO
+import           Data.ByteString           (ByteString)
+import qualified Data.ByteString           as ByteString
+import qualified Data.List                 as List
+import           Data.List.NonEmpty        (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty        as NonEmpty
+import           Data.Text                 (Text)
+import qualified Data.Text                 as Text
+import qualified Data.Text.IO              as Text.IO
 import qualified GHC.Exts
 import           Pouch.Time                (Time)
 import qualified Pouch.Time                as Time
@@ -73,8 +75,8 @@ import qualified Pouch.Time.Month          as Month
 import qualified Pouch.Time.Weekday        as Weekday
 import           Pouch.UUID                (UUID)
 import qualified Pouch.UUID                as UUID
-import           Prelude                 hiding (fromIntegral)
-import qualified System.IO               as IO
+import           Prelude                   hiding (fromIntegral)
+import qualified System.IO                 as IO
 
 -- * Logger
 
@@ -110,17 +112,17 @@ defaultTerminal toText =
 
 -- ** Logging Functions
 
-info :: Logger -> Record -> IO ()
-info (Logger f) = f Info
+info :: MonadIO m => Logger -> Record -> m ()
+info (Logger f) = MonadIO.liftIO . f Info
 
-warn :: Logger -> Record -> IO ()
-warn (Logger f) = f Warn
+warn :: MonadIO m => Logger -> Record -> m ()
+warn (Logger f) = MonadIO.liftIO . f Warn
 
-error' :: Logger -> Record -> IO ()
-error' (Logger f) = f Error
+error' :: MonadIO m => Logger -> Record -> m ()
+error' (Logger f) = MonadIO.liftIO . f Error
 
-debug :: Logger -> Record -> IO ()
-debug (Logger f) = f Debug
+debug :: MonadIO m => Logger -> Record -> m ()
+debug (Logger f) = MonadIO.liftIO . f Debug
 
 -- ** Modifiers
 
